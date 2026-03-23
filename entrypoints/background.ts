@@ -129,6 +129,14 @@ async function getActiveTabId(): Promise<number | undefined> {
 }
 
 async function storePageContentForTab(tabId: number, page: PageContentMessage['payload']): Promise<void> {
+  console.debug('[pocket-ai] storing page context', {
+    tabId,
+    url: page.url,
+    title: page.title,
+    contentLength: page.content.length,
+    source: page.source,
+  });
+
   await chrome.storage.session.set({
     [createPageContextStorageKey(tabId)]: page,
     [ACTIVE_PAGE_TAB_ID_KEY]: tabId,
@@ -142,11 +150,13 @@ async function storePageContentForTab(tabId: number, page: PageContentMessage['p
 }
 
 async function setActiveContextTab(tabId: number): Promise<void> {
+  console.debug('[pocket-ai] set active context tab', { tabId });
   await chrome.storage.session.set({ [ACTIVE_PAGE_TAB_ID_KEY]: tabId });
 }
 
 async function requestTabContextRefresh(tabId: number): Promise<void> {
   try {
+    console.debug('[pocket-ai] requesting tab context refresh', { tabId });
     await chrome.tabs.sendMessage<RequestPageContentSnapshotMessage, { ok?: boolean }>(tabId, {
       type: 'REQUEST_PAGE_CONTENT_SNAPSHOT',
     });
@@ -179,6 +189,8 @@ async function handleGetPageContentRequest(): Promise<GetPageContentResponse> {
           page: buildFallbackPageContext(url),
         };
       }
+
+      console.debug('[pocket-ai] no stored page context yet', { tabId, url });
 
       return {
         ok: false,
@@ -450,7 +462,15 @@ export default defineBackground(() => {
   });
 
   chrome.tabs.onActivated.addListener((activeInfo) => {
+    console.debug('[pocket-ai] tabs.onActivated fired', { tabId: activeInfo.tabId });
     void setActiveContextTab(activeInfo.tabId);
+
+    void chrome.tabs.get(activeInfo.tabId).then((tab) => {
+      if (tab.url && !shouldExtractPageFromUrl(tab.url)) {
+        void storePageContentForTab(activeInfo.tabId, buildFallbackPageContext(tab.url));
+      }
+    });
+
     void requestTabContextRefresh(activeInfo.tabId);
   });
 
@@ -463,8 +483,15 @@ export default defineBackground(() => {
       void setActiveContextTab(tabId);
     }
 
+    if (tab.url && !shouldExtractPageFromUrl(tab.url)) {
+      void storePageContentForTab(tabId, buildFallbackPageContext(tab.url));
+      return;
+    }
+
     void requestTabContextRefresh(tabId);
   });
+
+  console.info('[pocket-ai] background listeners ready: tabs.onActivated + tabs.onUpdated');
 
   chrome.commands.onCommand.addListener((command, tab) => {
     if (command !== 'toggle-sidepanel' || !tab?.id) {

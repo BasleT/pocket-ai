@@ -19,7 +19,7 @@ export function buildFallbackPageContext(url: string): PageContentResult {
   return {
     title: 'Unsupported page',
     url,
-    content: '',
+    content: `No readable article content was available for ${url || 'this page'}. Use visible text or navigate to a standard webpage for richer context.`,
     source: 'fallback',
     warning: 'This page has no extractable content for sidebar context.',
   };

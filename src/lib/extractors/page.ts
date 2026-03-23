@@ -3,6 +3,7 @@ import { Readability } from '@mozilla/readability';
 import type { PageContentResult } from '../../types/page';
 
 const MAX_CONTEXT_CHARS = 12_000;
+const MAX_FALLBACK_CHARS = 8_000;
 
 export type ReadabilityLikeResult = {
   title?: string | null;
@@ -40,7 +41,13 @@ export function buildPageContent(input: BuildPageContentInput): PageContentResul
 
   const hasReadableContent = readableText.length > 120;
 
-  const content = truncateText(hasReadableContent ? readableText : fallbackText);
+  const extractedContent = hasReadableContent
+    ? truncateText(readableText, MAX_CONTEXT_CHARS)
+    : truncateText(fallbackText, MAX_FALLBACK_CHARS);
+  const content =
+    extractedContent.length > 0
+      ? extractedContent
+      : 'No extractable page text was found. Use visible page text or try another page.';
   const title = readableTitle || fallbackTitle;
   const selection = normalizeText(input.selectionText);
 

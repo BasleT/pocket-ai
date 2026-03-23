@@ -42,31 +42,59 @@ function extractYouTubeVideoIdFromUrl(url: string): string | null {
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
-    let latestSelection = '';
-    let lastDispatchedUrl = '';
+    console.log('[pocket-ai] content script loaded on:', window.location.href);
 
-    const dispatchPageSnapshot = () => {
+    let latestSelection = '';
+    let lastDispatchedSignature = '';
+
+    const dispatchPageSnapshot = (reason: string) => {
       const currentUrl = window.location.href;
 
       if (!shouldExtractPageFromUrl(currentUrl)) {
-        return;
-      }
-
-      if (lastDispatchedUrl === currentUrl) {
+        console.debug('[pocket-ai] skipping extraction for unsupported URL:', currentUrl);
         return;
       }
 
       try {
         const page = extractPageContentFromDocument(latestSelection);
+        const signature = `${currentUrl}|${page.title}|${page.content.length}|${page.source}`;
+
+        if (signature === lastDispatchedSignature && reason !== 'manual-request') {
+          return;
+        }
+
         const message: PageContentMessage = {
           type: 'PAGE_CONTENT',
           payload: page,
         };
 
         void chrome.runtime.sendMessage(message);
-        lastDispatchedUrl = currentUrl;
-      } catch {
-        // Ignore extraction failures in content script.
+        lastDispatchedSignature = signature;
+
+        console.debug('[pocket-ai] dispatched page snapshot', {
+          reason,
+          url: currentUrl,
+          title: page.title,
+          contentLength: page.content.length,
+          source: page.source,
+        });
+      } catch (error) {
+        console.error('[pocket-ai] failed readability extraction, using raw fallback', error);
+
+        const fallbackText = (document.body?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 8_000);
+        const fallbackPage: PageContentMessage['payload'] = {
+          title: document.title || 'Untitled page',
+          url: currentUrl,
+          content: fallbackText || 'Page text extraction returned empty content.',
+          source: 'fallback',
+          warning: 'Readability extraction failed. Using raw page text fallback.',
+          selection: latestSelection || undefined,
+        };
+
+        void chrome.runtime.sendMessage({
+          type: 'PAGE_CONTENT',
+          payload: fallbackPage,
+        } satisfies PageContentMessage);
       }
     };
 
@@ -81,20 +109,21 @@ export default defineContentScript({
     const originalPushState = history.pushState.bind(history);
     history.pushState = ((...args: Parameters<History['pushState']>) => {
       originalPushState(...args);
-      dispatchPageSnapshot();
+      dispatchPageSnapshot('pushstate');
     }) as History['pushState'];
 
     const originalReplaceState = history.replaceState.bind(history);
     history.replaceState = ((...args: Parameters<History['replaceState']>) => {
       originalReplaceState(...args);
-      dispatchPageSnapshot();
+      dispatchPageSnapshot('replacestate');
     }) as History['replaceState'];
 
-    window.addEventListener('popstate', dispatchPageSnapshot);
-    window.addEventListener('hashchange', dispatchPageSnapshot);
-    window.addEventListener('load', dispatchPageSnapshot);
+    window.addEventListener('popstate', () => dispatchPageSnapshot('popstate'));
+    window.addEventListener('hashchange', () => dispatchPageSnapshot('hashchange'));
+    window.addEventListener('load', () => dispatchPageSnapshot('load'));
+    window.addEventListener('DOMContentLoaded', () => dispatchPageSnapshot('domcontentloaded'));
 
-    window.setTimeout(dispatchPageSnapshot, 0);
+    window.setTimeout(() => dispatchPageSnapshot('initial-timeout'), 0);
 
     chrome.runtime.onMessage.addListener(
       (
@@ -123,7 +152,7 @@ export default defineContentScript({
         }
 
         if (rawMessage.type === 'REQUEST_PAGE_CONTENT_SNAPSHOT') {
-          dispatchPageSnapshot();
+          dispatchPageSnapshot('manual-request');
           sendResponse({ ok: true });
           return false;
         }
