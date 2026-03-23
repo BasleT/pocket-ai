@@ -46,6 +46,85 @@ export default defineContentScript({
 
     let latestSelection = '';
     let lastDispatchedSignature = '';
+    let selectionToolbar: HTMLDivElement | null = null;
+
+    const removeToolbar = () => {
+      if (!selectionToolbar) {
+        return;
+      }
+
+      selectionToolbar.remove();
+      selectionToolbar = null;
+    };
+
+    const createActionPrompt = (action: 'Explain' | 'Summarize' | 'Translate' | 'Improve', text: string): string =>
+      `${action} this: ${text}`;
+
+    const showToolbar = (rect: DOMRect, text: string) => {
+      removeToolbar();
+
+      const toolbar = document.createElement('div');
+      toolbar.className = 'pocket-ai-selection-toolbar';
+      toolbar.style.position = 'fixed';
+      toolbar.style.left = `${rect.left + rect.width / 2}px`;
+      toolbar.style.top = `${Math.max(8, rect.top - 44)}px`;
+      toolbar.style.transform = 'translate(-50%, 4px)';
+      toolbar.style.opacity = '0';
+      toolbar.style.background = '#1a1a1a';
+      toolbar.style.border = '1px solid rgba(255,255,255,0.12)';
+      toolbar.style.borderRadius = '8px';
+      toolbar.style.padding = '4px';
+      toolbar.style.display = 'flex';
+      toolbar.style.gap = '2px';
+      toolbar.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)';
+      toolbar.style.zIndex = '2147483647';
+      toolbar.style.transition = 'opacity 150ms ease, transform 150ms ease';
+
+      const actions: Array<'Explain' | 'Summarize' | 'Translate' | 'Improve'> = [
+        'Explain',
+        'Summarize',
+        'Translate',
+        'Improve',
+      ];
+
+      for (const action of actions) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = action;
+        button.style.color = '#ffffff';
+        button.style.fontSize = '12px';
+        button.style.padding = '4px 8px';
+        button.style.borderRadius = '6px';
+        button.style.border = 'none';
+        button.style.background = 'transparent';
+        button.style.cursor = 'pointer';
+        button.style.transition = 'background 100ms';
+
+        button.addEventListener('mouseenter', () => {
+          button.style.background = 'rgba(255,255,255,0.1)';
+        });
+
+        button.addEventListener('mouseleave', () => {
+          button.style.background = 'transparent';
+        });
+
+        button.addEventListener('click', () => {
+          const prompt = createActionPrompt(action, text);
+          void chrome.runtime.sendMessage({ type: 'SELECTION_TOOLBAR_ACTION', prompt });
+          removeToolbar();
+        });
+
+        toolbar.appendChild(button);
+      }
+
+      document.documentElement.appendChild(toolbar);
+      selectionToolbar = toolbar;
+
+      window.requestAnimationFrame(() => {
+        toolbar.style.opacity = '1';
+        toolbar.style.transform = 'translate(-50%, 0)';
+      });
+    };
 
     const dispatchPageSnapshot = (reason: string) => {
       const currentUrl = window.location.href;
@@ -99,12 +178,41 @@ export default defineContentScript({
     };
 
     const updateSelection = () => {
-      latestSelection = window.getSelection()?.toString() ?? '';
+      const selection = window.getSelection();
+      const text = selection?.toString().trim() ?? '';
+      latestSelection = text;
+
+      if (!text || text.length < 10 || !selection || selection.rangeCount === 0) {
+        removeToolbar();
+        return;
+      }
+
+      try {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) {
+          removeToolbar();
+          return;
+        }
+
+        showToolbar(rect, text);
+      } catch {
+        removeToolbar();
+      }
     };
 
     document.addEventListener('selectionchange', updateSelection);
     window.addEventListener('mouseup', updateSelection);
     window.addEventListener('keyup', updateSelection);
+    window.addEventListener('scroll', removeToolbar, true);
+    document.addEventListener('mousedown', (event) => {
+      const target = event.target as Node | null;
+      if (selectionToolbar && target && selectionToolbar.contains(target)) {
+        return;
+      }
+
+      removeToolbar();
+    });
 
     const originalPushState = history.pushState.bind(history);
     history.pushState = ((...args: Parameters<History['pushState']>) => {

@@ -6,6 +6,7 @@ import { PdfPanel } from '../pdf/PdfPanel';
 import { SettingsPanel } from '../Settings/SettingsPanel';
 import { SummarizePanel } from '../summarize/SummarizePanel';
 import { YouTubePanel } from '../youtube/YouTubePanel';
+import { CONTENT_TYPE_META, detectContentType } from '../../lib/ai';
 import type { ActivePanel } from './types';
 import type { ChatModelId } from '../../types/chat';
 import type { PageContentResult } from '../../types/page';
@@ -48,13 +49,16 @@ type PanelProps = {
   pageTitle: string;
   pageWarning?: string;
   pageContext: PageContentResult | null;
+  previousPageContext: PageContentResult | null;
   chatSendRequest?: { id: string; text: string } | null;
   onChatSendRequestHandled?: (id: string) => void;
   onAskFollowUp: (summary: string) => void;
   selectedModelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
   themeMode: ThemeMode;
+  carryContext: boolean;
   onThemeModeChange: (theme: ThemeMode) => void;
+  onCarryContextChange: (enabled: boolean) => void;
 };
 
 export function Panel({
@@ -62,21 +66,34 @@ export function Panel({
   pageTitle,
   pageWarning,
   pageContext,
+  previousPageContext,
   chatSendRequest,
   onChatSendRequestHandled,
   onAskFollowUp,
   selectedModelId,
   onModelChange,
   themeMode,
+  carryContext,
   onThemeModeChange,
+  onCarryContextChange,
 }: PanelProps) {
   const content = PANEL_CONTENT[activePanel];
+  const contentType = pageContext ? detectContentType(pageContext.url, pageContext.content) : 'page';
+  const contentTypeMeta = CONTENT_TYPE_META[contentType];
 
   return (
     <section className="ui-panel" aria-live="polite">
       <header className="ui-panel-header">
         <p className="ui-brand">Pocket AI</p>
-        <p className="ui-page-title">{pageTitle}</p>
+        <div className="flex items-center gap-2 min-w-0">
+          <p key={pageContext?.url ?? pageTitle} className="ui-page-title page-title-animate">{pageTitle}</p>
+          {pageContext?.content ? (
+            <span key={`${pageContext.url}-${contentType}`} className="ui-content-badge badge-animate" title={contentTypeMeta.label}>
+              <span aria-hidden="true">{contentTypeMeta.emoji}</span>
+              <span>{contentTypeMeta.label}</span>
+            </span>
+          ) : null}
+        </div>
       </header>
 
       {pageWarning ? (
@@ -89,6 +106,8 @@ export function Panel({
         {activePanel === 'chat' ? (
           <ChatPanel
             pageContext={pageContext}
+            previousPageContext={previousPageContext}
+            carryContext={carryContext}
             sendRequest={chatSendRequest}
             onSendRequestHandled={onChatSendRequestHandled}
             modelId={selectedModelId}
@@ -108,6 +127,8 @@ export function Panel({
             onModelChange={onModelChange}
             themeMode={themeMode}
             onThemeModeChange={onThemeModeChange}
+            carryContext={carryContext}
+            onCarryContextChange={onCarryContextChange}
           />
       ) : (
           <div className="ui-empty">

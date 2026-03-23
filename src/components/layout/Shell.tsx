@@ -22,13 +22,16 @@ type ShellProps = {
   pageTitle: string;
   pageWarning?: string;
   pageContext: PageContentResult | null;
+  previousPageContext: PageContentResult | null;
   chatSendRequest?: { id: string; text: string } | null;
   onChatSendRequestHandled?: (id: string) => void;
   onAskFollowUp: (summary: string) => void;
   selectedModelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
   themeMode: ThemeMode;
+  carryContext: boolean;
   onThemeModeChange: (theme: ThemeMode) => void;
+  onCarryContextChange: (enabled: boolean) => void;
 };
 
 export function Shell({
@@ -37,13 +40,16 @@ export function Shell({
   pageTitle,
   pageWarning,
   pageContext,
+  previousPageContext,
   chatSendRequest,
   onChatSendRequestHandled,
   onAskFollowUp,
   selectedModelId,
   onModelChange,
   themeMode,
+  carryContext,
   onThemeModeChange,
+  onCarryContextChange,
 }: ShellProps) {
   return (
     <main className="ui-shell">
@@ -52,13 +58,16 @@ export function Shell({
         pageTitle={pageTitle}
         pageWarning={pageWarning}
         pageContext={pageContext}
+        previousPageContext={previousPageContext}
         chatSendRequest={chatSendRequest}
         onChatSendRequestHandled={onChatSendRequestHandled}
         onAskFollowUp={onAskFollowUp}
         selectedModelId={selectedModelId}
         onModelChange={onModelChange}
         themeMode={themeMode}
+        carryContext={carryContext}
         onThemeModeChange={onThemeModeChange}
+        onCarryContextChange={onCarryContextChange}
       />
       <IconRail activePanel={activePanel} items={RAIL_ITEMS} onSelect={onSelectPanel} />
     </main>

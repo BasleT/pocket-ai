@@ -57,6 +57,8 @@ function toSerializableMessages(
 
 type ChatPanelProps = {
   pageContext: PageContentResult | null;
+  previousPageContext: PageContentResult | null;
+  carryContext: boolean;
   sendRequest?: { id: string; text: string } | null;
   onSendRequestHandled?: (id: string) => void;
   modelId: ChatModelId;
@@ -65,6 +67,8 @@ type ChatPanelProps = {
 
 export function ChatPanel({
   pageContext,
+  previousPageContext,
+  carryContext,
   sendRequest,
   onSendRequestHandled,
   modelId,
@@ -74,9 +78,11 @@ export function ChatPanel({
   const [isStreaming, setIsStreaming] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null);
+  const [showPageChangeToast, setShowPageChangeToast] = useState(false);
   const activeRequestIdRef = useRef<string | null>(null);
   const activeTabIdRef = useRef<number | null>(null);
   const streamPortRef = useRef<chrome.runtime.Port | null>(null);
+  const lastPageUrlRef = useRef<string | null>(null);
 
   const quickActions = useMemo(
     () => ['Summarize this page', 'What is this about?', 'Key takeaways'],
@@ -212,7 +218,19 @@ export function ChatPanel({
     setChatError(null);
     activeRequestIdRef.current = requestId;
 
-    const serializable = toSerializableMessages(conversation, pageContext);
+    const serializable =
+      pageContext && pageContext.content
+        ? [
+            {
+              role: 'system' as const,
+              content: buildPageContextSystemPrompt(pageContext, {
+                includePreviousContext: carryContext,
+                previousPage: previousPageContext,
+              }),
+            },
+            ...conversation.map((entry) => ({ role: entry.role, content: entry.content })),
+          ]
+        : toSerializableMessages(conversation, pageContext);
 
     port.postMessage({
       type: 'CHAT_STREAM_START',
@@ -236,11 +254,44 @@ export function ChatPanel({
     onSendRequestHandled?.(sendRequest.id);
   }, [onSendRequestHandled, sendRequest]);
 
+  useEffect(() => {
+    if (!pageContext?.url) {
+      return;
+    }
+
+    if (!lastPageUrlRef.current) {
+      lastPageUrlRef.current = pageContext.url;
+      return;
+    }
+
+    if (lastPageUrlRef.current === pageContext.url) {
+      return;
+    }
+
+    lastPageUrlRef.current = pageContext.url;
+    setShowPageChangeToast(true);
+
+    const timeoutId = window.setTimeout(() => {
+      setShowPageChangeToast(false);
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [pageContext?.url]);
+
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 flex items-center gap-2">
         <p className="ui-subtle text-xs">Chatting about: {pageContext?.title ?? 'current page'}</p>
+        {carryContext && previousPageContext ? (
+          <span className="ui-context-pill" title="Including previous tab context">
+            📎 +1 previous page
+          </span>
+        ) : null}
       </div>
+
+      {showPageChangeToast ? <div className="ui-page-toast mx-4">✨ New page</div> : null}
 
       {messages.length === 0 ? (
         <div className="px-4 pt-2">

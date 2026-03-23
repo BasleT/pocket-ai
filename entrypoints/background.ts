@@ -30,6 +30,12 @@ import {
 } from '../src/types/ocr';
 import { API_KEY_FIELD_MAP } from '../src/types/settings';
 
+const PENDING_SELECTION_PROMPT_PREFIX = 'chat:pendingSelectionPrompt:';
+
+function createPendingSelectionPromptKey(tabId: number): string {
+  return `${PENDING_SELECTION_PROMPT_PREFIX}${tabId}`;
+}
+
 async function syncEmbedRules(): Promise<void> {
   try {
     await registerEmbedRules();
@@ -570,6 +576,28 @@ export default defineBackground(() => {
 
     if (message.type === 'RUN_OCR_ON_IMAGE' && typeof message.imageUrl === 'string') {
       void handleImageOcrClick(message.imageUrl).then(() => sendResponse({ ok: true }));
+      return true;
+    }
+
+    if (message.type === 'SELECTION_TOOLBAR_ACTION' && typeof message.prompt === 'string') {
+      const tabId = _sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ ok: false });
+        return false;
+      }
+
+      void chrome.storage.session
+        .set({ [createPendingSelectionPromptKey(tabId)]: message.prompt })
+        .then(() => chrome.sidePanel.open({ tabId }))
+        .then(() => {
+        openSidePanelTabs.add(tabId);
+        void chrome.runtime.sendMessage({ type: 'SELECTION_ACTION_CHAT', prompt: message.prompt });
+        sendResponse({ ok: true });
+        })
+        .catch(() => {
+          sendResponse({ ok: false });
+        });
+
       return true;
     }
 

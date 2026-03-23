@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@property --thinking-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
 @layer base {
   :root {
     --bg-base: #111111;
@@ -106,6 +112,20 @@
     color: var(--text-secondary);
   }
 
+  .ui-content-badge {
+    @apply inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px];
+    background: var(--accent-subtle);
+    color: var(--accent);
+  }
+
+  .page-title-animate {
+    animation: page-title-fade 200ms ease;
+  }
+
+  .badge-animate {
+    animation: badge-slide-in 150ms ease;
+  }
+
   .ui-panel-body {
     @apply min-h-0 flex-1 overflow-y-auto;
   }
@@ -208,6 +228,29 @@
     color: var(--text-primary);
   }
 
+  .thinking-bubble {
+    position: relative;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .thinking-bubble::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    z-index: -1;
+    background: conic-gradient(
+      from var(--thinking-angle),
+      transparent 0deg,
+      transparent 300deg,
+      rgba(139, 92, 246, 0.9) 345deg,
+      rgba(139, 92, 246, 0.4) 355deg,
+      transparent 360deg
+    );
+    animation: thinking-spin 2s linear infinite;
+  }
+
   .ui-input-bar {
     @apply shrink-0 border-t p-3;
     border-color: var(--border);
@@ -244,6 +287,24 @@
     animation: stream-cursor 1s steps(2, end) infinite;
   }
 
+  .mic-listening {
+    color: var(--accent);
+    animation: mic-pulse 1.2s ease-in-out infinite;
+  }
+
+  .ui-context-pill {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[10px];
+    color: var(--accent);
+    background: var(--accent-subtle);
+  }
+
+  .ui-page-toast {
+    @apply rounded-md border px-2 py-1 text-xs;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--accent) 16%, var(--bg-elevated));
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  }
+
   .panel-animate {
     animation: panel-enter 150ms ease;
   }
@@ -258,6 +319,45 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes thinking-spin {
+  to {
+    --thinking-angle: 360deg;
+  }
+}
+
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@keyframes page-title-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes badge-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 

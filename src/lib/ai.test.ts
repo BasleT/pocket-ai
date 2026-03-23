@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelMessage } from 'ai';
 
-import { GROQ_MODELS, buildPageContextSystemPrompt, type StreamChatDependencies, streamChat } from './ai';
+import {
+  GROQ_MODELS,
+  buildPageContextSystemPrompt,
+  detectContentType,
+  type StreamChatDependencies,
+  streamChat,
+} from './ai';
 
 describe('streamChat', () => {
   it('exposes the expected free Groq model IDs', () => {
@@ -62,5 +68,43 @@ describe('buildPageContextSystemPrompt', () => {
     expect(prompt).toContain('Example Title');
     expect(prompt).toContain('https://example.com/page');
     expect(prompt.length).toBeLessThan(30_000);
+  });
+
+  it('includes previous page context when carry-over is enabled', () => {
+    const prompt = buildPageContextSystemPrompt(
+      {
+        title: 'Current Page',
+        url: 'https://example.com/current',
+        content: 'Current content',
+        source: 'readability',
+      },
+      {
+        includePreviousContext: true,
+        previousPage: {
+          title: 'Previous Page',
+          url: 'https://example.com/previous',
+          content: 'Previous content',
+          source: 'readability',
+        },
+      },
+    );
+
+    expect(prompt).toContain('Previous page context');
+    expect(prompt).toContain('Previous Page');
+    expect(prompt).toContain('https://example.com/previous');
+  });
+});
+
+describe('detectContentType', () => {
+  it('detects a YouTube video page', () => {
+    expect(detectContentType('https://www.youtube.com/watch?v=abc', 'video transcript')).toBe('video');
+  });
+
+  it('detects developer docs pages from content signals', () => {
+    expect(detectContentType('https://example.dev/docs', 'import { x } from y; API endpoint reference')).toBe('docs');
+  });
+
+  it('falls back to generic page when no pattern matches', () => {
+    expect(detectContentType('https://example.com', 'just plain text with no special cues')).toBe('page');
   });
 });

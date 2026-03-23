@@ -8,6 +8,18 @@ import { storageGetSecret } from './storage';
 import type { ApiProviderId } from '../types/settings';
 import type { PageContentResult } from '../types/page';
 
+export type ContentType = 'video' | 'code' | 'recipe' | 'product' | 'article' | 'docs' | 'page';
+
+export const CONTENT_TYPE_META: Record<ContentType, { label: string; emoji: string }> = {
+  video: { label: 'Video', emoji: '📺' },
+  code: { label: 'Code', emoji: '💻' },
+  recipe: { label: 'Recipe', emoji: '🍳' },
+  product: { label: 'Product', emoji: '🛒' },
+  article: { label: 'Article', emoji: '📰' },
+  docs: { label: 'Docs', emoji: '📖' },
+  page: { label: 'Page', emoji: '🌐' },
+};
+
 export type ChatModel = {
   id: string;
   name: string;
@@ -59,19 +71,106 @@ export const GROQ_MODELS = CHAT_MODELS.filter((model) => model.provider === 'gro
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful AI assistant in a browser sidebar.';
 const MAX_PAGE_CONTEXT_CHARS = 24_000;
 
-export function buildPageContextSystemPrompt(page: PageContentResult): string {
-  const content =
-    page.content.length > MAX_PAGE_CONTEXT_CHARS
-      ? `${page.content.slice(0, MAX_PAGE_CONTEXT_CHARS)}...`
-      : page.content;
+function truncateContext(content: string): string {
+  if (content.length <= MAX_PAGE_CONTEXT_CHARS) {
+    return content;
+  }
 
-  return [
+  return `${content.slice(0, MAX_PAGE_CONTEXT_CHARS)}...`;
+}
+
+export function detectContentType(url: string, text: string): ContentType {
+  const normalizedUrl = url.toLowerCase();
+
+  if (normalizedUrl.includes('youtube.com/watch') || normalizedUrl.includes('youtu.be/')) {
+    return 'video';
+  }
+
+  if (normalizedUrl.includes('github.com')) {
+    return 'code';
+  }
+
+  if (/ingredients|prep time|servings/i.test(text)) {
+    return 'recipe';
+  }
+
+  if (/add to cart|buy now|\$[\d,.]+/i.test(text)) {
+    return 'product';
+  }
+
+  if (/by .+|published|breaking news/i.test(text)) {
+    return 'article';
+  }
+
+  if (/function|const |import |api|endpoint/i.test(text)) {
+    return 'docs';
+  }
+
+  return 'page';
+}
+
+function contentTypeInstruction(contentType: ContentType): string {
+  if (contentType === 'video') {
+    return 'The page is a video context. Prioritize timeline flow, major moments, and explain references from transcript context.';
+  }
+
+  if (contentType === 'code') {
+    return 'The page is a code repository context. Prioritize code-level accuracy, architecture, and actionable implementation guidance.';
+  }
+
+  if (contentType === 'recipe') {
+    return 'The page is a recipe context. Prioritize ingredients, measurements, substitutions, and concise step clarity.';
+  }
+
+  if (contentType === 'product') {
+    return 'The page is a product context. Prioritize price, value trade-offs, specs, and buying considerations.';
+  }
+
+  if (contentType === 'article') {
+    return 'The page is a news/article context. Prioritize claims, key facts, and concise neutral synthesis.';
+  }
+
+  if (contentType === 'docs') {
+    return 'The page is technical documentation. Prioritize exact API behavior, examples, and practical integration details.';
+  }
+
+  return 'The page is a general webpage. Prioritize relevance to visible page context and concise helpful responses.';
+}
+
+export function buildPageContextSystemPrompt(
+  page: PageContentResult,
+  options?: {
+    includePreviousContext?: boolean;
+    previousPage?: PageContentResult | null;
+  },
+): string {
+  const content = truncateContext(page.content);
+  const contentType = detectContentType(page.url, page.content);
+  const instructions = contentTypeInstruction(contentType);
+
+  const prompt = [
     'You are a helpful AI assistant in a browser sidebar.',
+    `Content type: ${CONTENT_TYPE_META[contentType].label}`,
+    instructions,
     `The user is currently reading: ${page.title}`,
     `URL: ${page.url}`,
     '',
     content,
-  ].join('\n');
+  ];
+
+  if (options?.includePreviousContext && options.previousPage?.content) {
+    prompt.push(
+      '',
+      '---',
+      'Previous page context (use only when it helps answer cross-tab questions):',
+      `Title: ${options.previousPage.title}`,
+      `URL: ${options.previousPage.url}`,
+      '',
+      truncateContext(options.previousPage.content),
+    );
+  }
+
+  return prompt.join('\n');
 }
 
 async function resolveProviderApiKey(provider: ApiProviderId): Promise<string | undefined> {

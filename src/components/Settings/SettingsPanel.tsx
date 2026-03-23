@@ -20,6 +20,8 @@ type SettingsPanelProps = {
   onModelChange: (modelId: ChatModelId) => void;
   themeMode: ThemeMode;
   onThemeModeChange: (theme: ThemeMode) => void;
+  carryContext: boolean;
+  onCarryContextChange: (enabled: boolean) => void;
 };
 
 const PROVIDERS: ApiProviderId[] = ['groq', 'openai', 'anthropic', 'google'];
@@ -29,6 +31,8 @@ export function SettingsPanel({
   onModelChange,
   themeMode,
   onThemeModeChange,
+  carryContext,
+  onCarryContextChange,
 }: SettingsPanelProps) {
   const [apiConfigured, setApiConfigured] = useState<Record<ApiProviderId, boolean>>({
     groq: false,
@@ -135,6 +139,19 @@ export function SettingsPanel({
           >
             {themeMode === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
             {themeMode === 'dark' ? 'Dark enabled' : 'Light enabled'}
+          </button>
+        </div>
+
+        <div className="mt-3">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Carry context between tabs
+          </p>
+          <button
+            type="button"
+            onClick={() => onCarryContextChange(!carryContext)}
+            className="ui-btn ui-btn-ghost mt-2"
+          >
+            {carryContext ? 'Enabled' : 'Disabled'}
           </button>
         </div>
       </div>
