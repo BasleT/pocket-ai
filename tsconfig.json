@@ -1,0 +1,16 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx"
+  },
+  "include": [
+    "entrypoints",
+    "src",
+    ".wxt/wxt.d.ts",
+    "wxt.config.ts",
+    "tailwind.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
+}
