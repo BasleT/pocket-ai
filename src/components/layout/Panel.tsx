@@ -1,4 +1,6 @@
+import { ChatPanel } from '../Chat/ChatPanel';
 import type { ActivePanel } from './types';
+import type { PageContentResult } from '../../types/page';
 
 type PanelContent = {
   title: string;
@@ -36,9 +38,10 @@ type PanelProps = {
   activePanel: ActivePanel;
   pageTitle: string;
   pageWarning?: string;
+  pageContext: PageContentResult | null;
 };
 
-export function Panel({ activePanel, pageTitle, pageWarning }: PanelProps) {
+export function Panel({ activePanel, pageTitle, pageWarning, pageContext }: PanelProps) {
   const content = PANEL_CONTENT[activePanel];
 
   return (
@@ -51,33 +54,18 @@ export function Panel({ activePanel, pageTitle, pageWarning }: PanelProps) {
         {pageWarning ? <p className="mt-1 text-[11px] text-amber-600">{pageWarning}</p> : null}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-700">{content.title} panel skeleton is ready.</p>
-          <p className="mt-2 text-xs text-slate-500">
-            Phase 0 layout only: feature logic and AI behavior come in later phases.
-          </p>
+      {activePanel === 'chat' ? (
+        <ChatPanel pageContext={pageContext} />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-sm text-slate-700">{content.title} panel skeleton is ready.</p>
+            <p className="mt-2 text-xs text-slate-500">
+              This panel will be implemented in its dedicated phase.
+            </p>
+          </div>
         </div>
-      </div>
-
-      <footer className="border-t border-slate-200 bg-white px-3 py-3">
-        <div className="flex items-center gap-2">
-          <select
-            className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs text-slate-600"
-            aria-label="Model selector placeholder"
-            defaultValue="llama-3.3-70b-versatile"
-          >
-            <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
-          </select>
-          <input
-            type="text"
-            className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700"
-            placeholder="Ask about this page..."
-            aria-label="Chat input placeholder"
-            readOnly
-          />
-        </div>
-      </footer>
+      )}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import { streamText, type ModelMessage } from 'ai';
 
 import { storageGetSecret } from './storage';
 import type { ApiProviderId } from '../types/settings';
+import type { PageContentResult } from '../types/page';
 
 export type ChatModel = {
   id: string;
@@ -56,6 +57,22 @@ export const CHAT_MODELS: ChatModel[] = [
 export const GROQ_MODELS = CHAT_MODELS.filter((model) => model.provider === 'groq');
 
 const DEFAULT_SYSTEM_PROMPT = 'You are a helpful AI assistant in a browser sidebar.';
+const MAX_PAGE_CONTEXT_CHARS = 24_000;
+
+export function buildPageContextSystemPrompt(page: PageContentResult): string {
+  const content =
+    page.content.length > MAX_PAGE_CONTEXT_CHARS
+      ? `${page.content.slice(0, MAX_PAGE_CONTEXT_CHARS)}...`
+      : page.content;
+
+  return [
+    'You are a helpful AI assistant in a browser sidebar.',
+    `The user is currently reading: ${page.title}`,
+    `URL: ${page.url}`,
+    '',
+    content,
+  ].join('\n');
+}
 
 async function resolveProviderApiKey(provider: ApiProviderId): Promise<string | undefined> {
   const storedApiKey = await storageGetSecret(`${provider}ApiKey`);

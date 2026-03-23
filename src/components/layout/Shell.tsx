@@ -1,6 +1,7 @@
 import { IconRail } from './IconRail';
 import { Panel } from './Panel';
 import type { ActivePanel, RailItem } from './types';
+import type { PageContentResult } from '../../types/page';
 
 const RAIL_ITEMS: RailItem[] = [
   { id: 'chat', icon: '💬', label: 'Chat' },
@@ -16,12 +17,18 @@ type ShellProps = {
   onSelectPanel: (panel: ActivePanel) => void;
   pageTitle: string;
   pageWarning?: string;
+  pageContext: PageContentResult | null;
 };
 
-export function Shell({ activePanel, onSelectPanel, pageTitle, pageWarning }: ShellProps) {
+export function Shell({ activePanel, onSelectPanel, pageTitle, pageWarning, pageContext }: ShellProps) {
   return (
     <main className="flex h-screen w-full overflow-hidden bg-white text-text">
-      <Panel activePanel={activePanel} pageTitle={pageTitle} pageWarning={pageWarning} />
+      <Panel
+        activePanel={activePanel}
+        pageTitle={pageTitle}
+        pageWarning={pageWarning}
+        pageContext={pageContext}
+      />
       <IconRail activePanel={activePanel} items={RAIL_ITEMS} onSelect={onSelectPanel} />
     </main>
   );

@@ -20,6 +20,7 @@ function App() {
       onSelectPanel={setActivePanel}
       pageTitle={pageTitle}
       pageWarning={pageWarning}
+      pageContext={page}
     />
   );
 }
