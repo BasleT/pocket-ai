@@ -2,9 +2,11 @@ import { registerEmbedRules } from '../src/lib/declarativeRules';
 import { streamChat } from '../src/lib/ai';
 import { DEFAULT_OCR_LANGUAGE, normalizeOcrLanguage, recognizeImageText } from '../src/lib/extractors/ocr';
 import { chunkTranscript, fetchTranscriptByVideoId } from '../src/lib/extractors/youtube';
+import { storageGetSecret } from '../src/lib/storage';
 import type { ChatPortResponse, ChatStreamStartMessage, SerializableModelMessage } from '../src/types/chat';
 import type { OcrResult } from '../src/types/ocr';
 import type { GetPageContentMessage, GetPageContentResponse } from '../src/types/page';
+import type { ApiProviderId, TestConnectionResponse } from '../src/types/settings';
 import type {
   GetYouTubeContextResponse,
   GetYouTubeVideoInfoMessage,
@@ -15,6 +17,7 @@ import {
   OCR_LANGUAGE_STORAGE_KEY,
   OCR_RESULT_STORAGE_KEY,
 } from '../src/types/ocr';
+import { API_KEY_FIELD_MAP } from '../src/types/settings';
 
 async function syncEmbedRules(): Promise<void> {
   try {
@@ -277,6 +280,52 @@ async function handleImageOcrClick(imageUrl: string): Promise<void> {
   }
 }
 
+async function pingProviderConnection(provider: ApiProviderId, key: string): Promise<TestConnectionResponse> {
+  try {
+    let response: Response;
+
+    if (provider === 'openai') {
+      response = await fetch('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+    } else if (provider === 'anthropic') {
+      response = await fetch('https://api.anthropic.com/v1/models', {
+        headers: {
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+        },
+      });
+    } else if (provider === 'google') {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    } else {
+      response = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+    }
+
+    if (!response.ok) {
+      return { ok: false, message: `HTTP ${response.status}` };
+    }
+
+    return { ok: true, message: 'Connection successful' };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Connection failed',
+    };
+  }
+}
+
+async function handleTestProviderConnection(provider: ApiProviderId): Promise<TestConnectionResponse> {
+  const field = API_KEY_FIELD_MAP[provider];
+  const key = await storageGetSecret(field);
+  if (!key) {
+    return { ok: false, message: 'API key not configured' };
+  }
+
+  return pingProviderConnection(provider, key);
+}
+
 export default defineBackground(() => {
   void syncEmbedRules();
   void ensureOcrContextMenu();
@@ -353,6 +402,13 @@ export default defineBackground(() => {
 
     if (message.type === 'GET_YOUTUBE_CONTEXT') {
       void handleGetYouTubeContextRequest().then((response) => sendResponse(response));
+      return true;
+    }
+
+    if (message.type === 'TEST_PROVIDER_CONNECTION') {
+      void handleTestProviderConnection(message.provider as ApiProviderId).then((response) =>
+        sendResponse(response),
+      );
       return true;
     }
 

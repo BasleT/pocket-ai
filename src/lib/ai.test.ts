@@ -18,6 +18,9 @@ describe('streamChat', () => {
 
     const dependencies: StreamChatDependencies = {
       createGroqClient: () => () => ({ kind: 'model' }),
+      createOpenAiClient: () => () => ({ kind: 'model' }),
+      createAnthropicClient: () => () => ({ kind: 'model' }),
+      createGoogleClient: () => () => ({ kind: 'model' }),
       getApiKey: async () => 'test-key',
       streamTextImpl: () => ({
         textStream: (async function* stream() {

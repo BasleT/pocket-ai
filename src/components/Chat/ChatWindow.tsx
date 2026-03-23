@@ -4,7 +4,7 @@ import { storageGet, storageSet } from '../../lib/storage';
 import type {
   ChatPortResponse,
   ChatStreamStartMessage,
-  GroqModelId,
+  ChatModelId,
   LocalChatMessage,
   SerializableModelMessage,
 } from '../../types/chat';
@@ -23,7 +23,7 @@ const toSerializableMessages = (messages: LocalChatMessage[]): SerializableModel
   }));
 
 type ChatWindowProps = {
-  modelId: GroqModelId;
+  modelId: ChatModelId;
   contextSystemMessage?: string;
   draftText?: string;
   onDraftTextChange?: (value: string) => void;

@@ -1,3 +1,10 @@
+import {
+  createChromeLocalSecretStore,
+  getEncryptedSecret,
+  removeEncryptedSecret,
+  setEncryptedSecret,
+} from './secureStorage';
+
 type StorageArea = 'local' | 'session';
 
 type StoredRecord = Record<string, unknown>;
@@ -33,4 +40,18 @@ export async function storageGetMany<T extends StoredRecord>(
   const storageArea = await getStorageArea(area);
   const result = await storageArea.get(keys.map((key) => String(key)));
   return result as Partial<T>;
+}
+
+const secretStore = createChromeLocalSecretStore();
+
+export async function storageSetSecret(key: string, value: string): Promise<void> {
+  await setEncryptedSecret(secretStore, key, value);
+}
+
+export async function storageGetSecret(key: string): Promise<string | undefined> {
+  return getEncryptedSecret(secretStore, key);
+}
+
+export async function storageRemoveSecret(key: string): Promise<void> {
+  await removeEncryptedSecret(secretStore, key);
 }

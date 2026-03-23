@@ -1,8 +1,8 @@
 import type { ModelMessage } from 'ai';
 
-import type { GROQ_MODELS } from '../lib/ai';
+import type { CHAT_MODELS } from '../lib/ai';
 
-export type GroqModelId = (typeof GROQ_MODELS)[number]['id'];
+export type ChatModelId = (typeof CHAT_MODELS)[number]['id'];
 
 export type LocalChatMessage = {
   id: string;
@@ -18,7 +18,7 @@ export type SerializableModelMessage = {
 export type ChatStreamStartMessage = {
   type: 'CHAT_STREAM_START';
   requestId: string;
-  modelId: GroqModelId;
+  modelId: ChatModelId;
   messages: SerializableModelMessage[];
 };
 

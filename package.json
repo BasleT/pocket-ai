@@ -18,7 +18,10 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.63",
+    "@ai-sdk/google": "^3.0.52",
     "@ai-sdk/groq": "^3.0.31",
+    "@ai-sdk/openai": "^3.0.47",
     "@mozilla/readability": "^0.6.0",
     "ai": "^6.0.134",
     "pdfjs-dist": "^5.4.296",
