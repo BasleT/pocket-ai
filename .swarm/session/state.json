@@ -1,0 +1,344 @@
+{
+  "version": 1,
+  "writtenAt": 1774269831383,
+  "toolAggregates": {
+    "bash": {
+      "tool": "bash",
+      "count": 23,
+      "successCount": 23,
+      "failureCount": 0,
+      "totalDuration": 115901
+    },
+    "grep": {
+      "tool": "grep",
+      "count": 7,
+      "successCount": 7,
+      "failureCount": 0,
+      "totalDuration": 1577
+    },
+    "read": {
+      "tool": "read",
+      "count": 66,
+      "successCount": 66,
+      "failureCount": 0,
+      "totalDuration": 907
+    },
+    "skill": {
+      "tool": "skill",
+      "count": 4,
+      "successCount": 4,
+      "failureCount": 0,
+      "totalDuration": 612
+    },
+    "todowrite": {
+      "tool": "todowrite",
+      "count": 2,
+      "successCount": 2,
+      "failureCount": 0,
+      "totalDuration": 19
+    },
+    "checkpoint": {
+      "tool": "checkpoint",
+      "count": 1,
+      "successCount": 1,
+      "failureCount": 0,
+      "totalDuration": 97
+    },
+    "apply_patch": {
+      "tool": "apply_patch",
+      "count": 12,
+      "successCount": 12,
+      "failureCount": 0,
+      "totalDuration": 6465
+    },
+    "write": {
+      "tool": "write",
+      "count": 2,
+      "successCount": 2,
+      "failureCount": 0,
+      "totalDuration": 23
+    },
+    "task": {
+      "tool": "task",
+      "count": 19,
+      "successCount": 19,
+      "failureCount": 0,
+      "totalDuration": 737813
+    },
+    "glob": {
+      "tool": "glob",
+      "count": 8,
+      "successCount": 8,
+      "failureCount": 0,
+      "totalDuration": 1418
+    },
+    "test_runner": {
+      "tool": "test_runner",
+      "count": 2,
+      "successCount": 2,
+      "failureCount": 0,
+      "totalDuration": 10
+    },
+    "edit": {
+      "tool": "edit",
+      "count": 8,
+      "successCount": 8,
+      "failureCount": 0,
+      "totalDuration": 128
+    },
+    "webfetch": {
+      "tool": "webfetch",
+      "count": 1,
+      "successCount": 1,
+      "failureCount": 0,
+      "totalDuration": 129
+    }
+  },
+  "activeAgent": {
+    "ses_2fee44df2ffeOSpIerXD7F4300": "architect",
+    "ses_2f3667b1fffeU3ACVUW4oTWtxi": "explorer",
+    "ses_2f36428c3ffe5hMotQ0OGEym5e": "sme",
+    "ses_2f3612baeffe35NplTJcegSkTW": "architect",
+    "ses_2f3608b3bffeNSEvsdhY7nKlAa": "reviewer",
+    "ses_2f3601716ffezfnY64o8UKX7pN": "architect",
+    "ses_2f35ee11dffe6NTOIheXKPqbOB": "architect",
+    "ses_2f35e7a05ffeWy9UmunYw2w0aA": "architect",
+    "ses_2f35e1c8cffeKA4AtHuNOKgrEA": "architect",
+    "ses_2f35caabdffeipxfBrp1FmS0kv": "architect",
+    "ses_2f35beb43ffeINcf58vnLEp0EB": "architect",
+    "ses_2f35af77dffe30B04ctYc8fkTm": "architect",
+    "ses_2f35a7877ffe8fN8LyveBlJhYA": "coder",
+    "ses_2f35a3200ffeFqKc7OKHs1oaTQ": "architect",
+    "ses_2f359cb56ffeO2dWfXeIau5l1k": "reviewer",
+    "ses_2f3596330ffeJFS9TMyo2Ogjss": "architect",
+    "ses_2f3584f9fffe5oGxd1qZYefFjX": "architect",
+    "ses_2f35748b2ffel1eQZvr1honddv": "reviewer",
+    "ses_2f356bdacffe7HjAudMRB51pcG": "architect",
+    "ses_2f3559d21ffetaqB7EgIPEVrja": "architect",
+    "ses_2f354e5b7ffeGv2peVvnhONnYf": "reviewer",
+    "ses_2f3548358ffe9RP2sDuOx6rBGX": "architect",
+    "ses_2e548e685ffeVEMfUyiMSzPi0c": "architect",
+    "ses_2e5478ac0ffemNPE7iswJXzQaF": "swarm/planner",
+    "ses_2e547466affeME8wSO1TRcr5iI": "swarm/planner",
+    "ses_2e5472292ffe51YkuVHpxoF2hO": "explorer"
+  },
+  "delegationChains": {
+    "ses_2e548e685ffeVEMfUyiMSzPi0c": [
+      {
+        "from": "architect",
+        "to": "build",
+        "timestamp": 1774269759355
+      }
+    ]
+  },
+  "agentSessions": {
+    "ses_2e548e685ffeVEMfUyiMSzPi0c": {
+      "agentName": "architect",
+      "lastToolCallTime": 1774269774099,
+      "lastAgentEventTime": 1774269774099,
+      "delegationActive": false,
+      "activeInvocationId": 2,
+      "lastInvocationIdByAgent": {
+        "build": 2
+      },
+      "windows": {
+        "build:2": {
+          "id": 2,
+          "agentName": "build",
+          "startedAtMs": 1774269759355,
+          "toolCalls": 0,
+          "consecutiveErrors": 0,
+          "hardLimitHit": false,
+          "lastSuccessTimeMs": 1774269759355,
+          "recentToolCalls": [],
+          "warningIssued": false,
+          "warningReason": ""
+        },
+        "build:1": {
+          "id": 1,
+          "agentName": "build",
+          "startedAtMs": 1774269700545,
+          "toolCalls": 1,
+          "consecutiveErrors": 0,
+          "hardLimitHit": false,
+          "lastSuccessTimeMs": 1774269707692,
+          "recentToolCalls": [
+            {
+              "tool": "webfetch",
+              "argsHash": 14910277749950902000,
+              "timestamp": 1774269707561
+            }
+          ],
+          "warningIssued": false,
+          "warningReason": ""
+        }
+      },
+      "lastCompactionHint": 0,
+      "architectWriteCount": 0,
+      "lastCoderDelegationTaskId": null,
+      "currentTaskId": null,
+      "turboMode": false,
+      "gateLog": {},
+      "reviewerCallCount": {},
+      "lastGateFailure": null,
+      "partialGateWarningsIssuedForTask": [
+        "ses_2e548e685ffeVEMfUyiMSzPi0c:unknown"
+      ],
+      "selfFixAttempted": false,
+      "selfCodingWarnedAtCount": 0,
+      "catastrophicPhaseWarnings": [],
+      "lastPhaseCompleteTimestamp": 0,
+      "lastPhaseCompletePhase": 0,
+      "phaseAgentsDispatched": [
+        "build"
+      ],
+      "lastCompletedPhaseAgentsDispatched": [],
+      "qaSkipCount": 0,
+      "qaSkipTaskIds": [],
+      "pendingAdvisoryMessages": [],
+      "taskWorkflowStates": {},
+      "scopeViolationDetected": false
+    },
+    "ses_2e5478ac0ffemNPE7iswJXzQaF": {
+      "agentName": "swarm/planner",
+      "lastToolCallTime": 1774269789513,
+      "lastAgentEventTime": 1774269789513,
+      "delegationActive": true,
+      "activeInvocationId": 1,
+      "lastInvocationIdByAgent": {
+        "swarm/planner": 1
+      },
+      "windows": {
+        "swarm/planner:1": {
+          "id": 1,
+          "agentName": "swarm/planner",
+          "startedAtMs": 1774269789513,
+          "toolCalls": 0,
+          "consecutiveErrors": 0,
+          "hardLimitHit": false,
+          "lastSuccessTimeMs": 1774269789513,
+          "recentToolCalls": [],
+          "warningIssued": false,
+          "warningReason": ""
+        }
+      },
+      "lastCompactionHint": 0,
+      "architectWriteCount": 0,
+      "lastCoderDelegationTaskId": null,
+      "currentTaskId": null,
+      "turboMode": false,
+      "gateLog": {},
+      "reviewerCallCount": {},
+      "lastGateFailure": null,
+      "partialGateWarningsIssuedForTask": [],
+      "selfFixAttempted": false,
+      "selfCodingWarnedAtCount": 0,
+      "catastrophicPhaseWarnings": [],
+      "lastPhaseCompleteTimestamp": 0,
+      "lastPhaseCompletePhase": 0,
+      "phaseAgentsDispatched": [
+        "swarm/planner"
+      ],
+      "lastCompletedPhaseAgentsDispatched": [],
+      "qaSkipCount": 0,
+      "qaSkipTaskIds": [],
+      "pendingAdvisoryMessages": [],
+      "taskWorkflowStates": {},
+      "scopeViolationDetected": false
+    },
+    "ses_2e547466affeME8wSO1TRcr5iI": {
+      "agentName": "swarm/planner",
+      "lastToolCallTime": 1774269806998,
+      "lastAgentEventTime": 1774269806998,
+      "delegationActive": true,
+      "activeInvocationId": 1,
+      "lastInvocationIdByAgent": {
+        "swarm/planner": 1
+      },
+      "windows": {
+        "swarm/planner:1": {
+          "id": 1,
+          "agentName": "swarm/planner",
+          "startedAtMs": 1774269806998,
+          "toolCalls": 0,
+          "consecutiveErrors": 0,
+          "hardLimitHit": false,
+          "lastSuccessTimeMs": 1774269806998,
+          "recentToolCalls": [],
+          "warningIssued": false,
+          "warningReason": ""
+        }
+      },
+      "lastCompactionHint": 0,
+      "architectWriteCount": 0,
+      "lastCoderDelegationTaskId": null,
+      "currentTaskId": null,
+      "turboMode": false,
+      "gateLog": {},
+      "reviewerCallCount": {},
+      "lastGateFailure": null,
+      "partialGateWarningsIssuedForTask": [],
+      "selfFixAttempted": false,
+      "selfCodingWarnedAtCount": 0,
+      "catastrophicPhaseWarnings": [],
+      "lastPhaseCompleteTimestamp": 0,
+      "lastPhaseCompletePhase": 0,
+      "phaseAgentsDispatched": [
+        "swarm/planner"
+      ],
+      "lastCompletedPhaseAgentsDispatched": [],
+      "qaSkipCount": 0,
+      "qaSkipTaskIds": [],
+      "pendingAdvisoryMessages": [],
+      "taskWorkflowStates": {},
+      "scopeViolationDetected": false
+    },
+    "ses_2e5472292ffe51YkuVHpxoF2hO": {
+      "agentName": "explorer",
+      "lastToolCallTime": 1774269816175,
+      "lastAgentEventTime": 1774269816175,
+      "delegationActive": true,
+      "activeInvocationId": 1,
+      "lastInvocationIdByAgent": {
+        "explorer": 1
+      },
+      "windows": {
+        "explorer:1": {
+          "id": 1,
+          "agentName": "explorer",
+          "startedAtMs": 1774269816175,
+          "toolCalls": 0,
+          "consecutiveErrors": 0,
+          "hardLimitHit": false,
+          "lastSuccessTimeMs": 1774269816175,
+          "recentToolCalls": [],
+          "warningIssued": false,
+          "warningReason": ""
+        }
+      },
+      "lastCompactionHint": 0,
+      "architectWriteCount": 0,
+      "lastCoderDelegationTaskId": null,
+      "currentTaskId": null,
+      "turboMode": false,
+      "gateLog": {},
+      "reviewerCallCount": {},
+      "lastGateFailure": null,
+      "partialGateWarningsIssuedForTask": [],
+      "selfFixAttempted": false,
+      "selfCodingWarnedAtCount": 0,
+      "catastrophicPhaseWarnings": [],
+      "lastPhaseCompleteTimestamp": 0,
+      "lastPhaseCompletePhase": 0,
+      "phaseAgentsDispatched": [
+        "explorer"
+      ],
+      "lastCompletedPhaseAgentsDispatched": [],
+      "qaSkipCount": 0,
+      "qaSkipTaskIds": [],
+      "pendingAdvisoryMessages": [],
+      "taskWorkflowStates": {},
+      "scopeViolationDetected": false
+    }
+  }
+}

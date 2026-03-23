@@ -1,0 +1,34 @@
+# WXT build output
+.output/
+.wxt/
+
+# Dependencies
+node_modules/
+
+# Environment / API keys - NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Extension packages
+*.zip
+*.crx
+*.xpi
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+*.suo
+*.user
+
+# Logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# Test coverage
+coverage/
