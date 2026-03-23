@@ -27,6 +27,8 @@ type ChatWindowProps = {
   contextSystemMessage?: string;
   draftText?: string;
   onDraftTextChange?: (value: string) => void;
+  sendRequest?: { id: string; text: string } | null;
+  onSendRequestHandled?: (id: string) => void;
 };
 
 type RetryContext = {
@@ -50,12 +52,15 @@ export function ChatWindow({
   contextSystemMessage,
   draftText,
   onDraftTextChange,
+  sendRequest,
+  onSendRequestHandled,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [retryContext, setRetryContext] = useState<RetryContext | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
+  const lastHandledSendRequestId = useRef<string | null>(null);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -161,6 +166,22 @@ export function ChatWindow({
     const nextConversation = [...messages, { id: `user-${crypto.randomUUID()}`, role: 'user' as const, content: text }];
     await openAndStream(nextConversation);
   };
+
+  useEffect(() => {
+    if (!sendRequest || isStreaming) {
+      return;
+    }
+
+    if (lastHandledSendRequestId.current === sendRequest.id) {
+      return;
+    }
+
+    lastHandledSendRequestId.current = sendRequest.id;
+
+    void handleSend(sendRequest.text).finally(() => {
+      onSendRequestHandled?.(sendRequest.id);
+    });
+  }, [handleSend, isStreaming, onSendRequestHandled, sendRequest]);
 
   const retry = async () => {
     if (!retryContext || isStreaming) {

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChatWindow } from '../../src/components/Chat/ChatWindow';
 import { EmbedProvider } from '../../src/components/providers/EmbedProvider';
 import { EmbedProviderTab } from '../../src/components/providers/EmbedProviderTab';
+import { YouTubeSummarizer } from '../../src/components/Summarizer/YouTubeSummarizer';
 import { ContextBar } from '../../src/components/Toolbar/ContextBar';
 import { ModelPicker } from '../../src/components/Toolbar/ModelPicker';
 import {
@@ -14,6 +15,7 @@ import { GROQ_MODELS } from '../../src/lib/ai';
 import { storageGet, storageSet } from '../../src/lib/storage';
 import type { GroqModelId } from '../../src/types/chat';
 import type { GetPageContentResponse, PageContentResult } from '../../src/types/page';
+import type { GetYouTubeContextResponse, YouTubeContextData } from '../../src/types/youtube';
 
 type SidebarMode = 'embed' | 'ai';
 
@@ -62,6 +64,9 @@ function App() {
   const [pageContextError, setPageContextError] = useState<string | null>(null);
   const [isContextLoading, setIsContextLoading] = useState(false);
   const [quickPromptDraft, setQuickPromptDraft] = useState('');
+  const [youtubeContext, setYouTubeContext] = useState<YouTubeContextData | null>(null);
+  const [isYouTubeLoading, setIsYouTubeLoading] = useState(false);
+  const [sendRequest, setSendRequest] = useState<{ id: string; text: string } | null>(null);
   const [loadedFromSession, setLoadedFromSession] = useState(false);
 
   const openProviderIdSet = useMemo(() => new Set(openProviderIds), [openProviderIds]);
@@ -140,12 +145,34 @@ function App() {
     }
   };
 
+  const loadYouTubeContext = async () => {
+    setIsYouTubeLoading(true);
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: 'GET_YOUTUBE_CONTEXT',
+      })) as GetYouTubeContextResponse;
+
+      if (!response?.ok) {
+        setYouTubeContext(null);
+        return;
+      }
+
+      setYouTubeContext(response.data);
+    } catch {
+      setYouTubeContext(null);
+    } finally {
+      setIsYouTubeLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (mode !== 'ai') {
       return;
     }
 
     void loadPageContext();
+    void loadYouTubeContext();
   }, [mode]);
 
   const contextSystemMessage = pageContext
@@ -241,11 +268,30 @@ function App() {
             </div>
           ) : null}
 
+          {youtubeContext?.isYouTubePage ? (
+            <YouTubeSummarizer
+              context={youtubeContext}
+              isLoading={isYouTubeLoading}
+              onRefresh={() => {
+                void loadYouTubeContext();
+              }}
+              onSummarize={(prompt) => {
+                setQuickPromptDraft(prompt);
+                setSendRequest({ id: crypto.randomUUID(), text: prompt });
+              }}
+            />
+          ) : null}
+
           <ChatWindow
             modelId={selectedModelId}
             contextSystemMessage={contextSystemMessage}
             draftText={quickPromptDraft}
             onDraftTextChange={setQuickPromptDraft}
+            sendRequest={sendRequest}
+            onSendRequestHandled={(id) => {
+              setSendRequest((previous) => (previous?.id === id ? null : previous));
+              setQuickPromptDraft('');
+            }}
           />
         </section>
       )}

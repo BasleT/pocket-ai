@@ -1,7 +1,13 @@
 import { registerEmbedRules } from '../src/lib/declarativeRules';
 import { streamChat } from '../src/lib/ai';
+import { chunkTranscript, fetchTranscriptByVideoId } from '../src/lib/extractors/youtube';
 import type { ChatPortResponse, ChatStreamStartMessage, SerializableModelMessage } from '../src/types/chat';
 import type { GetPageContentMessage, GetPageContentResponse } from '../src/types/page';
+import type {
+  GetYouTubeContextResponse,
+  GetYouTubeVideoInfoMessage,
+  GetYouTubeVideoInfoResponse,
+} from '../src/types/youtube';
 
 async function syncEmbedRules(): Promise<void> {
   try {
@@ -131,6 +137,93 @@ async function handleGetPageContentRequest(): Promise<GetPageContentResponse> {
   }
 }
 
+async function handleGetYouTubeContextRequest(): Promise<GetYouTubeContextResponse> {
+  const tabId = await getActiveTabId();
+  if (!tabId) {
+    return { ok: false, message: 'No active tab found.' };
+  }
+
+  let videoInfo: GetYouTubeVideoInfoResponse;
+
+  try {
+    const response = await chrome.tabs.sendMessage<
+      GetYouTubeVideoInfoMessage,
+      GetYouTubeVideoInfoResponse
+    >(tabId, {
+      type: 'GET_YOUTUBE_VIDEO_INFO',
+    });
+
+    if (!response) {
+      return { ok: false, message: 'No response from content script.' };
+    }
+
+    videoInfo = response;
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error ? error.message : 'Unable to detect YouTube video context.',
+    };
+  }
+
+  if (!videoInfo.isYouTubePage) {
+    return {
+      ok: true,
+      data: {
+        isYouTubePage: false,
+        hasTranscript: false,
+        title: videoInfo.title,
+        url: videoInfo.url,
+        videoId: null,
+        transcriptChunks: [],
+      },
+    };
+  }
+
+  if (!videoInfo.videoId) {
+    return {
+      ok: true,
+      data: {
+        isYouTubePage: true,
+        hasTranscript: false,
+        title: videoInfo.title,
+        url: videoInfo.url,
+        videoId: null,
+        transcriptChunks: [],
+      },
+    };
+  }
+
+  try {
+    const transcriptText = await fetchTranscriptByVideoId(videoInfo.videoId);
+    const transcriptChunks = chunkTranscript(transcriptText);
+
+    return {
+      ok: true,
+      data: {
+        isYouTubePage: true,
+        hasTranscript: transcriptChunks.length > 0,
+        title: videoInfo.title,
+        url: videoInfo.url,
+        videoId: videoInfo.videoId,
+        transcriptChunks,
+      },
+    };
+  } catch {
+    return {
+      ok: true,
+      data: {
+        isYouTubePage: true,
+        hasTranscript: false,
+        title: videoInfo.title,
+        url: videoInfo.url,
+        videoId: videoInfo.videoId,
+        transcriptChunks: [],
+      },
+    };
+  }
+}
+
 export default defineBackground(() => {
   void syncEmbedRules();
 
@@ -184,6 +277,11 @@ export default defineBackground(() => {
 
     if (message.type === 'GET_PAGE_CONTENT') {
       void handleGetPageContentRequest().then((response) => sendResponse(response));
+      return true;
+    }
+
+    if (message.type === 'GET_YOUTUBE_CONTEXT') {
+      void handleGetYouTubeContextRequest().then((response) => sendResponse(response));
       return true;
     }
 
