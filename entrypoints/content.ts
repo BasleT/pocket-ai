@@ -1,13 +1,17 @@
-import { extractPageContentFromDocument } from '../src/lib/extractors/page';
+import { Readability } from '@mozilla/readability';
 import type {
   GetPageContentMessage,
   GetPageContentResponse,
-  PageContentMessage,
   RequestPageContentSnapshotMessage,
 } from '../src/types/page';
 import type { GetYouTubeVideoInfoMessage, GetYouTubeVideoInfoResponse } from '../src/types/youtube';
 import type { GetPageImagesMessage, GetPageImagesResponse } from '../src/types/ocr';
-import { shouldExtractPageFromUrl } from '../src/lib/pageContextStore';
+
+declare global {
+  interface Window {
+    Readability?: typeof Readability;
+  }
+}
 
 function extractYouTubeVideoIdFromUrl(url: string): string | null {
   let parsedUrl: URL;
@@ -42,10 +46,10 @@ function extractYouTubeVideoIdFromUrl(url: string): string | null {
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
+    window.Readability = Readability;
     console.log('[pocket-ai] content script loaded on:', window.location.href);
 
     let latestSelection = '';
-    let lastDispatchedSignature = '';
     let selectionToolbar: HTMLDivElement | null = null;
 
     const removeToolbar = () => {
@@ -126,55 +130,18 @@ export default defineContentScript({
       });
     };
 
-    const dispatchPageSnapshot = (reason: string) => {
-      const currentUrl = window.location.href;
+    const requestBackgroundSnapshot = (reason: string) => {
+      void chrome.runtime.sendMessage({
+        type: 'REQUEST_BACKGROUND_PAGE_SNAPSHOT',
+        reason,
+        selection: latestSelection,
+      });
 
-      if (!shouldExtractPageFromUrl(currentUrl)) {
-        console.debug('[pocket-ai] skipping extraction for unsupported URL:', currentUrl);
-        return;
-      }
-
-      try {
-        const page = extractPageContentFromDocument(latestSelection);
-        const signature = `${currentUrl}|${page.title}|${page.content.length}|${page.source}`;
-
-        if (signature === lastDispatchedSignature && reason !== 'manual-request') {
-          return;
-        }
-
-        const message: PageContentMessage = {
-          type: 'PAGE_CONTENT',
-          payload: page,
-        };
-
-        void chrome.runtime.sendMessage(message);
-        lastDispatchedSignature = signature;
-
-        console.debug('[pocket-ai] dispatched page snapshot', {
-          reason,
-          url: currentUrl,
-          title: page.title,
-          contentLength: page.content.length,
-          source: page.source,
-        });
-      } catch (error) {
-        console.error('[pocket-ai] failed readability extraction, using raw fallback', error);
-
-        const fallbackText = (document.body?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 8_000);
-        const fallbackPage: PageContentMessage['payload'] = {
-          title: document.title || 'Untitled page',
-          url: currentUrl,
-          content: fallbackText || 'Page text extraction returned empty content.',
-          source: 'fallback',
-          warning: 'Readability extraction failed. Using raw page text fallback.',
-          selection: latestSelection || undefined,
-        };
-
-        void chrome.runtime.sendMessage({
-          type: 'PAGE_CONTENT',
-          payload: fallbackPage,
-        } satisfies PageContentMessage);
-      }
+      console.debug('[pocket-ai] requested background snapshot', {
+        reason,
+        url: window.location.href,
+        selectionLength: latestSelection.length,
+      });
     };
 
     const updateSelection = () => {
@@ -217,21 +184,21 @@ export default defineContentScript({
     const originalPushState = history.pushState.bind(history);
     history.pushState = ((...args: Parameters<History['pushState']>) => {
       originalPushState(...args);
-      dispatchPageSnapshot('pushstate');
+      requestBackgroundSnapshot('pushstate');
     }) as History['pushState'];
 
     const originalReplaceState = history.replaceState.bind(history);
     history.replaceState = ((...args: Parameters<History['replaceState']>) => {
       originalReplaceState(...args);
-      dispatchPageSnapshot('replacestate');
+      requestBackgroundSnapshot('replacestate');
     }) as History['replaceState'];
 
-    window.addEventListener('popstate', () => dispatchPageSnapshot('popstate'));
-    window.addEventListener('hashchange', () => dispatchPageSnapshot('hashchange'));
-    window.addEventListener('load', () => dispatchPageSnapshot('load'));
-    window.addEventListener('DOMContentLoaded', () => dispatchPageSnapshot('domcontentloaded'));
+    window.addEventListener('popstate', () => requestBackgroundSnapshot('popstate'));
+    window.addEventListener('hashchange', () => requestBackgroundSnapshot('hashchange'));
+    window.addEventListener('load', () => requestBackgroundSnapshot('load'));
+    window.addEventListener('DOMContentLoaded', () => requestBackgroundSnapshot('domcontentloaded'));
 
-    window.setTimeout(() => dispatchPageSnapshot('initial-timeout'), 0);
+    window.setTimeout(() => requestBackgroundSnapshot('initial-timeout'), 0);
 
     chrome.runtime.onMessage.addListener(
       (
@@ -260,7 +227,7 @@ export default defineContentScript({
         }
 
         if (rawMessage.type === 'REQUEST_PAGE_CONTENT_SNAPSHOT') {
-          dispatchPageSnapshot('manual-request');
+          requestBackgroundSnapshot('manual-request');
           sendResponse({ ok: true });
           return false;
         }
@@ -281,8 +248,10 @@ export default defineContentScript({
         }
 
         try {
-          const page = extractPageContentFromDocument(latestSelection);
-          const response: GetPageContentResponse = { ok: true, page };
+          const response: GetPageContentResponse = {
+            ok: false,
+            message: 'Page extraction is handled by background scripting execution.',
+          };
           sendResponse(response);
         } catch (error) {
           const response: GetPageContentResponse = {

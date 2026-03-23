@@ -4,7 +4,7 @@ export type PageContentResult = {
   content: string;
   excerpt?: string;
   selection?: string;
-  source: 'readability' | 'fallback';
+  source: 'readability' | 'dom' | 'body' | 'unsupported' | 'fallback';
   warning?: string;
 };
 

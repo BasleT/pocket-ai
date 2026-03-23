@@ -31,9 +31,114 @@ import {
 import { API_KEY_FIELD_MAP } from '../src/types/settings';
 
 const PENDING_SELECTION_PROMPT_PREFIX = 'chat:pendingSelectionPrompt:';
+const MAX_EXTRACT_CHARS = 15_000;
 
 function createPendingSelectionPromptKey(tabId: number): string {
   return `${PENDING_SELECTION_PROMPT_PREFIX}${tabId}`;
+}
+
+function extractPagePayloadInPage(selectionText: string) {
+  const truncate = (value: string, max = MAX_EXTRACT_CHARS): string => {
+    if (value.length <= max) {
+      return value;
+    }
+
+    return value.slice(0, max);
+  };
+
+  const normalize = (value: string | null | undefined): string => (value ?? '').replace(/\s+/g, ' ').trim();
+  const url = window.location.href;
+  const title = normalize(document.title) || 'Untitled page';
+  const selection = normalize(selectionText);
+
+  try {
+    console.log('[pocket-ai] extraction step 1 readability begin', { url });
+    const ReadabilityCtor = (window as Window & { Readability?: new (doc: Document) => { parse: () => { title?: string | null; textContent?: string | null } | null } }).Readability;
+
+    if (ReadabilityCtor) {
+      const clonedDoc = document.cloneNode(true) as Document;
+      const reader = new ReadabilityCtor(clonedDoc);
+      const article = reader.parse();
+      const readableText = normalize(article?.textContent);
+
+      if (article && readableText.length > 200) {
+        console.log('[pocket-ai] extraction step 1 readability success', {
+          url,
+          length: readableText.length,
+        });
+
+        return {
+          title: normalize(article.title) || title,
+          url,
+          content: truncate(readableText),
+          source: 'readability' as const,
+          selection: selection || undefined,
+        };
+      }
+
+      console.log('[pocket-ai] extraction step 1 readability empty', {
+        url,
+        length: readableText.length,
+      });
+    } else {
+      console.log('[pocket-ai] extraction step 1 readability unavailable', { url });
+    }
+  } catch (error) {
+    console.log('[pocket-ai] extraction step 1 readability error', { url, error });
+  }
+
+  console.log('[pocket-ai] extraction step 2 dom fallback begin', { url });
+  const selectors = ['main', 'article', '[role="main"]', '.content', '#content', '.post', '#post'];
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    const text = normalize(element instanceof HTMLElement ? element.innerText : '');
+
+    if (text.length > 200) {
+      console.log('[pocket-ai] extraction step 2 dom fallback success', {
+        url,
+        selector,
+        length: text.length,
+      });
+
+      return {
+        title,
+        url,
+        content: truncate(text),
+        source: 'dom' as const,
+        selection: selection || undefined,
+        warning: `Using DOM fallback selector: ${selector}`,
+      };
+    }
+  }
+
+  console.log('[pocket-ai] extraction step 3 body fallback begin', { url });
+  const bodyText = normalize(document.body?.innerText ?? '');
+  if (bodyText.length > 100) {
+    console.log('[pocket-ai] extraction step 3 body fallback success', {
+      url,
+      length: bodyText.length,
+    });
+
+    return {
+      title,
+      url,
+      content: truncate(bodyText),
+      source: 'body' as const,
+      selection: selection || undefined,
+      warning: 'Using body text fallback extraction.',
+    };
+  }
+
+  console.log('[pocket-ai] extraction step 4 unsupported', { url });
+  return {
+    title,
+    url,
+    content: '',
+    source: 'unsupported' as const,
+    selection: selection || undefined,
+    warning: 'No extractable content found on this page.',
+  };
 }
 
 async function syncEmbedRules(): Promise<void> {
@@ -168,6 +273,83 @@ async function requestTabContextRefresh(tabId: number): Promise<void> {
     });
   } catch {
     // Ignore tabs where content script is unavailable.
+  }
+}
+
+async function extractPageContentForTab(tabId: number, selectionText = '', reason = 'unknown'): Promise<void> {
+  const tab = await chrome.tabs.get(tabId);
+  const tabUrl = tab.url ?? '';
+
+  if (!shouldExtractPageFromUrl(tabUrl)) {
+    console.debug('[pocket-ai] extraction skipped for unsupported URL protocol', { tabId, tabUrl, reason });
+    await storePageContentForTab(tabId, buildFallbackPageContext(tabUrl));
+    return;
+  }
+
+  console.debug('[pocket-ai] extraction begin via executeScript', {
+    tabId,
+    tabUrl,
+    reason,
+    selectionLength: selectionText.length,
+  });
+
+  try {
+    const injected = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: extractPagePayloadInPage,
+      args: [selectionText],
+    });
+
+    const payload = injected[0]?.result as PageContentMessage['payload'] | undefined;
+    if (!payload) {
+      console.debug('[pocket-ai] extraction produced no payload result', { tabId, reason });
+      await storePageContentForTab(tabId, {
+        ...buildFallbackPageContext(tabUrl),
+        warning: 'Extraction script returned no result.',
+      });
+      return;
+    }
+
+    const safePayload: PageContentMessage['payload'] = {
+      title: payload.title || tab.title || 'Untitled page',
+      url: payload.url || tabUrl,
+      content: payload.content || '',
+      source: payload.source,
+      warning: payload.warning,
+      selection: payload.selection,
+      excerpt: payload.excerpt,
+    };
+
+    if (!safePayload.content && safePayload.source !== 'unsupported') {
+      safePayload.source = 'unsupported';
+      safePayload.warning = 'Extraction returned empty content.';
+    }
+
+    console.debug('[pocket-ai] extraction complete', {
+      tabId,
+      reason,
+      source: safePayload.source,
+      contentLength: safePayload.content.length,
+      url: safePayload.url,
+    });
+
+    await storePageContentForTab(tabId, safePayload);
+  } catch (error) {
+    console.error('[pocket-ai] extraction executeScript failed', {
+      tabId,
+      reason,
+      tabUrl,
+      error,
+    });
+
+    await storePageContentForTab(tabId, {
+      title: tab.title || 'Untitled page',
+      url: tabUrl,
+      content: '',
+      source: 'unsupported',
+      selection: selectionText || undefined,
+      warning: 'Page extraction failed in executeScript.',
+    });
   }
 }
 
@@ -478,6 +660,7 @@ export default defineBackground(() => {
     });
 
     void requestTabContextRefresh(activeInfo.tabId);
+    void extractPageContentForTab(activeInfo.tabId, '', 'tabs.onActivated');
   });
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -495,6 +678,7 @@ export default defineBackground(() => {
     }
 
     void requestTabContextRefresh(tabId);
+    void extractPageContentForTab(tabId, '', 'tabs.onUpdated');
   });
 
   console.info('[pocket-ai] background listeners ready: tabs.onActivated + tabs.onUpdated');
@@ -576,6 +760,23 @@ export default defineBackground(() => {
 
     if (message.type === 'RUN_OCR_ON_IMAGE' && typeof message.imageUrl === 'string') {
       void handleImageOcrClick(message.imageUrl).then(() => sendResponse({ ok: true }));
+      return true;
+    }
+
+    if (message.type === 'REQUEST_BACKGROUND_PAGE_SNAPSHOT') {
+      const tabId = _sender.tab?.id;
+      if (!tabId) {
+        sendResponse({ ok: false, message: 'Missing sender tab ID.' });
+        return false;
+      }
+
+      const selectionText = typeof message.selection === 'string' ? message.selection : '';
+      const reason = typeof message.reason === 'string' ? message.reason : 'content-script-request';
+
+      void extractPageContentForTab(tabId, selectionText, reason).then(() => {
+        sendResponse({ ok: true });
+      });
+
       return true;
     }
 
