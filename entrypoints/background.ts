@@ -10,7 +10,7 @@ import {
 } from '../src/lib/pageContextStore';
 import { storageGetSecret } from '../src/lib/storage';
 import type { ChatPortResponse, ChatStreamStartMessage, SerializableModelMessage } from '../src/types/chat';
-import type { OcrResult } from '../src/types/ocr';
+import type { GetPageImagesResponse, OcrResult } from '../src/types/ocr';
 import type {
   GetPageContentMessage,
   GetPageContentResponse,
@@ -331,6 +331,27 @@ async function handleImageOcrClick(imageUrl: string): Promise<void> {
   }
 }
 
+async function handleGetPageImagesRequest(): Promise<GetPageImagesResponse> {
+  const tabId = await getActiveTabId();
+  if (!tabId) {
+    return { ok: false, images: [] };
+  }
+
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: 'GET_PAGE_IMAGES',
+    });
+
+    if (!response || !Array.isArray(response.images)) {
+      return { ok: false, images: [] };
+    }
+
+    return { ok: true, images: response.images as string[] };
+  } catch {
+    return { ok: false, images: [] };
+  }
+}
+
 async function pingProviderConnection(provider: ApiProviderId, key: string): Promise<TestConnectionResponse> {
   try {
     let response: Response;
@@ -512,6 +533,16 @@ export default defineBackground(() => {
       void handleTestProviderConnection(message.provider as ApiProviderId).then((response) =>
         sendResponse(response),
       );
+      return true;
+    }
+
+    if (message.type === 'GET_PAGE_IMAGES') {
+      void handleGetPageImagesRequest().then((response) => sendResponse(response));
+      return true;
+    }
+
+    if (message.type === 'RUN_OCR_ON_IMAGE' && typeof message.imageUrl === 'string') {
+      void handleImageOcrClick(message.imageUrl).then(() => sendResponse({ ok: true }));
       return true;
     }
 

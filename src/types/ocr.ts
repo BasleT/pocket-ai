@@ -16,3 +16,17 @@ export type OcrUpdatedMessage = {
   type: 'OCR_RESULT_UPDATED';
   result: OcrResult;
 };
+
+export type GetPageImagesMessage = {
+  type: 'GET_PAGE_IMAGES';
+};
+
+export type GetPageImagesResponse = {
+  ok: boolean;
+  images: string[];
+};
+
+export type RunOcrOnImageMessage = {
+  type: 'RUN_OCR_ON_IMAGE';
+  imageUrl: string;
+};

@@ -160,6 +160,34 @@ function installChromePreviewShim() {
           };
         }
 
+        if (typed?.type === 'GET_PAGE_IMAGES') {
+          return {
+            ok: true,
+            images: [
+              'https://picsum.photos/seed/pocketai-1/320/200',
+              'https://picsum.photos/seed/pocketai-2/320/200',
+              'https://picsum.photos/seed/pocketai-3/320/200',
+            ],
+          };
+        }
+
+        if (typed?.type === 'RUN_OCR_ON_IMAGE' && typeof (typed as { imageUrl?: unknown }).imageUrl === 'string') {
+          const imageUrl = (typed as { imageUrl: string }).imageUrl;
+          window.setTimeout(() => {
+            emitRuntimeMessage({
+              type: 'OCR_RESULT_UPDATED',
+              result: {
+                text: `Preview OCR text extracted from: ${imageUrl}`,
+                language: 'eng',
+                imageUrl,
+                capturedAt: Date.now(),
+              },
+            });
+          }, 250);
+
+          return { ok: true };
+        }
+
         if (typed?.type === 'KEEP_ALIVE') {
           return { ok: true };
         }

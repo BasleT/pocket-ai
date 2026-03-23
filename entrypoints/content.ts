@@ -6,6 +6,7 @@ import type {
   RequestPageContentSnapshotMessage,
 } from '../src/types/page';
 import type { GetYouTubeVideoInfoMessage, GetYouTubeVideoInfoResponse } from '../src/types/youtube';
+import type { GetPageImagesMessage, GetPageImagesResponse } from '../src/types/ocr';
 import { shouldExtractPageFromUrl } from '../src/lib/pageContextStore';
 
 function extractYouTubeVideoIdFromUrl(url: string): string | null {
@@ -100,7 +101,8 @@ export default defineContentScript({
         rawMessage:
           | GetPageContentMessage
           | GetYouTubeVideoInfoMessage
-          | RequestPageContentSnapshotMessage,
+          | RequestPageContentSnapshotMessage
+          | GetPageImagesMessage,
         _sender,
         sendResponse,
       ) => {
@@ -123,6 +125,17 @@ export default defineContentScript({
         if (rawMessage.type === 'REQUEST_PAGE_CONTENT_SNAPSHOT') {
           dispatchPageSnapshot();
           sendResponse({ ok: true });
+          return false;
+        }
+
+        if (rawMessage.type === 'GET_PAGE_IMAGES') {
+          const images = Array.from(document.querySelectorAll('img'))
+            .map((img) => img.currentSrc || img.src)
+            .filter((value): value is string => Boolean(value));
+
+          const uniqueImages = Array.from(new Set(images)).slice(0, 50);
+          const response: GetPageImagesResponse = { ok: true, images: uniqueImages };
+          sendResponse(response);
           return false;
         }
 

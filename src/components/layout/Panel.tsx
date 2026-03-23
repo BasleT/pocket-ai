@@ -1,4 +1,5 @@
 import { ChatPanel } from '../Chat/ChatPanel';
+import { OcrPanel } from '../ocr/OcrPanel';
 import { PdfPanel } from '../pdf/PdfPanel';
 import { SummarizePanel } from '../summarize/SummarizePanel';
 import { YouTubePanel } from '../youtube/YouTubePanel';
@@ -80,6 +81,8 @@ export function Panel({
         <YouTubePanel onAskAboutVideo={onAskFollowUp} />
       ) : activePanel === 'pdf' ? (
         <PdfPanel onAskAboutPdf={onAskFollowUp} />
+      ) : activePanel === 'ocr' ? (
+        <OcrPanel onSendToChat={onAskFollowUp} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4">
