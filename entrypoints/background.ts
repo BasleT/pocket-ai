@@ -2,10 +2,21 @@ import { registerEmbedRules } from '../src/lib/declarativeRules';
 import { streamChat } from '../src/lib/ai';
 import { DEFAULT_OCR_LANGUAGE, normalizeOcrLanguage, recognizeImageText } from '../src/lib/extractors/ocr';
 import { chunkTranscript, fetchTranscriptByVideoId } from '../src/lib/extractors/youtube';
+import {
+  ACTIVE_PAGE_TAB_ID_KEY,
+  buildFallbackPageContext,
+  createPageContextStorageKey,
+  shouldExtractPageFromUrl,
+} from '../src/lib/pageContextStore';
 import { storageGetSecret } from '../src/lib/storage';
 import type { ChatPortResponse, ChatStreamStartMessage, SerializableModelMessage } from '../src/types/chat';
 import type { OcrResult } from '../src/types/ocr';
-import type { GetPageContentMessage, GetPageContentResponse } from '../src/types/page';
+import type {
+  GetPageContentMessage,
+  GetPageContentResponse,
+  PageContentMessage,
+  RequestPageContentSnapshotMessage,
+} from '../src/types/page';
 import type { ApiProviderId, TestConnectionResponse } from '../src/types/settings';
 import type {
   GetYouTubeContextResponse,
@@ -117,25 +128,65 @@ async function getActiveTabId(): Promise<number | undefined> {
   return tab?.id;
 }
 
+async function storePageContentForTab(tabId: number, page: PageContentMessage['payload']): Promise<void> {
+  await chrome.storage.session.set({
+    [createPageContextStorageKey(tabId)]: page,
+    [ACTIVE_PAGE_TAB_ID_KEY]: tabId,
+  });
+
+  void chrome.runtime.sendMessage({
+    type: 'PAGE_CONTENT_UPDATED',
+    tabId,
+    page,
+  });
+}
+
+async function setActiveContextTab(tabId: number): Promise<void> {
+  await chrome.storage.session.set({ [ACTIVE_PAGE_TAB_ID_KEY]: tabId });
+}
+
+async function requestTabContextRefresh(tabId: number): Promise<void> {
+  try {
+    await chrome.tabs.sendMessage<RequestPageContentSnapshotMessage, { ok?: boolean }>(tabId, {
+      type: 'REQUEST_PAGE_CONTENT_SNAPSHOT',
+    });
+  } catch {
+    // Ignore tabs where content script is unavailable.
+  }
+}
+
 async function handleGetPageContentRequest(): Promise<GetPageContentResponse> {
   const tabId = await getActiveTabId();
   if (!tabId) {
-    return { ok: false, message: 'No active tab found.' };
+    return {
+      ok: true,
+      page: buildFallbackPageContext(''),
+    };
   }
 
   try {
-    const response = await chrome.tabs.sendMessage<GetPageContentMessage, GetPageContentResponse>(tabId, {
-      type: 'GET_PAGE_CONTENT',
-    });
+    const key = createPageContextStorageKey(tabId);
+    const stored = await chrome.storage.session.get(key);
+    const page = stored[key] as PageContentMessage['payload'] | undefined;
 
-    if (!response) {
+    if (!page) {
+      const tab = await chrome.tabs.get(tabId);
+      const url = tab.url ?? '';
+
+      if (!shouldExtractPageFromUrl(url)) {
+        return {
+          ok: true,
+          page: buildFallbackPageContext(url),
+        };
+      }
+
       return {
         ok: false,
-        message: 'No response from content script. Try refreshing the page.',
+        message: 'Page context is still loading. Refresh the page if needed.',
       };
     }
 
-    return response;
+    return { ok: true, page };
   } catch (error) {
     return {
       ok: false,
@@ -377,6 +428,23 @@ export default defineBackground(() => {
     }
   });
 
+  chrome.tabs.onActivated.addListener((activeInfo) => {
+    void setActiveContextTab(activeInfo.tabId);
+    void requestTabContextRefresh(activeInfo.tabId);
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status !== 'complete') {
+      return;
+    }
+
+    if (tab.active) {
+      void setActiveContextTab(tabId);
+    }
+
+    void requestTabContextRefresh(tabId);
+  });
+
   chrome.commands.onCommand.addListener((command, tab) => {
     if (command !== 'toggle-sidepanel' || !tab?.id) {
       return;
@@ -412,6 +480,17 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message) {
       return;
+    }
+
+    if (message.type === 'PAGE_CONTENT') {
+      const tabId = _sender.tab?.id;
+      if (!tabId || !message.payload) {
+        sendResponse({ ok: false });
+        return false;
+      }
+
+      void storePageContentForTab(tabId, message.payload).then(() => sendResponse({ ok: true }));
+      return true;
     }
 
     if (message.type === 'KEEP_ALIVE') {

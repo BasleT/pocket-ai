@@ -14,12 +14,14 @@ const RAIL_ITEMS: RailItem[] = [
 type ShellProps = {
   activePanel: ActivePanel;
   onSelectPanel: (panel: ActivePanel) => void;
+  pageTitle: string;
+  pageWarning?: string;
 };
 
-export function Shell({ activePanel, onSelectPanel }: ShellProps) {
+export function Shell({ activePanel, onSelectPanel, pageTitle, pageWarning }: ShellProps) {
   return (
     <main className="flex h-screen w-full overflow-hidden bg-white text-text">
-      <Panel activePanel={activePanel} />
+      <Panel activePanel={activePanel} pageTitle={pageTitle} pageWarning={pageWarning} />
       <IconRail activePanel={activePanel} items={RAIL_ITEMS} onSelect={onSelectPanel} />
     </main>
   );

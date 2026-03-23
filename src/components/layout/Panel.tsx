@@ -34,9 +34,11 @@ const PANEL_CONTENT: Record<ActivePanel, PanelContent> = {
 
 type PanelProps = {
   activePanel: ActivePanel;
+  pageTitle: string;
+  pageWarning?: string;
 };
 
-export function Panel({ activePanel }: PanelProps) {
+export function Panel({ activePanel, pageTitle, pageWarning }: PanelProps) {
   const content = PANEL_CONTENT[activePanel];
 
   return (
@@ -45,6 +47,8 @@ export function Panel({ activePanel }: PanelProps) {
         <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Pocket AI</p>
         <h1 className="mt-1 text-base font-semibold text-slate-900">{content.title}</h1>
         <p className="mt-1 text-xs text-slate-500">{content.description}</p>
+        <p className="mt-2 truncate text-[11px] text-slate-400">Current page: {pageTitle}</p>
+        {pageWarning ? <p className="mt-1 text-[11px] text-amber-600">{pageWarning}</p> : null}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">

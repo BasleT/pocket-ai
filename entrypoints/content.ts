@@ -1,6 +1,12 @@
 import { extractPageContentFromDocument } from '../src/lib/extractors/page';
-import type { GetPageContentMessage, GetPageContentResponse } from '../src/types/page';
+import type {
+  GetPageContentMessage,
+  GetPageContentResponse,
+  PageContentMessage,
+  RequestPageContentSnapshotMessage,
+} from '../src/types/page';
 import type { GetYouTubeVideoInfoMessage, GetYouTubeVideoInfoResponse } from '../src/types/youtube';
+import { shouldExtractPageFromUrl } from '../src/lib/pageContextStore';
 
 function extractYouTubeVideoIdFromUrl(url: string): string | null {
   let parsedUrl: URL;
@@ -36,6 +42,32 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
     let latestSelection = '';
+    let lastDispatchedUrl = '';
+
+    const dispatchPageSnapshot = () => {
+      const currentUrl = window.location.href;
+
+      if (!shouldExtractPageFromUrl(currentUrl)) {
+        return;
+      }
+
+      if (lastDispatchedUrl === currentUrl) {
+        return;
+      }
+
+      try {
+        const page = extractPageContentFromDocument(latestSelection);
+        const message: PageContentMessage = {
+          type: 'PAGE_CONTENT',
+          payload: page,
+        };
+
+        void chrome.runtime.sendMessage(message);
+        lastDispatchedUrl = currentUrl;
+      } catch {
+        // Ignore extraction failures in content script.
+      }
+    };
 
     const updateSelection = () => {
       latestSelection = window.getSelection()?.toString() ?? '';
@@ -45,9 +77,30 @@ export default defineContentScript({
     window.addEventListener('mouseup', updateSelection);
     window.addEventListener('keyup', updateSelection);
 
+    const originalPushState = history.pushState.bind(history);
+    history.pushState = ((...args: Parameters<History['pushState']>) => {
+      originalPushState(...args);
+      dispatchPageSnapshot();
+    }) as History['pushState'];
+
+    const originalReplaceState = history.replaceState.bind(history);
+    history.replaceState = ((...args: Parameters<History['replaceState']>) => {
+      originalReplaceState(...args);
+      dispatchPageSnapshot();
+    }) as History['replaceState'];
+
+    window.addEventListener('popstate', dispatchPageSnapshot);
+    window.addEventListener('hashchange', dispatchPageSnapshot);
+    window.addEventListener('load', dispatchPageSnapshot);
+
+    window.setTimeout(dispatchPageSnapshot, 0);
+
     chrome.runtime.onMessage.addListener(
       (
-        rawMessage: GetPageContentMessage | GetYouTubeVideoInfoMessage,
+        rawMessage:
+          | GetPageContentMessage
+          | GetYouTubeVideoInfoMessage
+          | RequestPageContentSnapshotMessage,
         _sender,
         sendResponse,
       ) => {
@@ -64,6 +117,12 @@ export default defineContentScript({
             title: document.title,
           };
           sendResponse(response);
+          return false;
+        }
+
+        if (rawMessage.type === 'REQUEST_PAGE_CONTENT_SNAPSHOT') {
+          dispatchPageSnapshot();
+          sendResponse({ ok: true });
           return false;
         }
 
