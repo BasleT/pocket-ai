@@ -31,14 +31,15 @@ import {
 import { API_KEY_FIELD_MAP } from '../src/types/settings';
 
 const PENDING_SELECTION_PROMPT_PREFIX = 'chat:pendingSelectionPrompt:';
-const MAX_EXTRACT_CHARS = 15_000;
 
 function createPendingSelectionPromptKey(tabId: number): string {
   return `${PENDING_SELECTION_PROMPT_PREFIX}${tabId}`;
 }
 
 function extractPagePayloadInPage(selectionText: string) {
-  const truncate = (value: string, max = MAX_EXTRACT_CHARS): string => {
+  const maxExtractChars = 15_000;
+
+  const truncate = (value: string, max = maxExtractChars): string => {
     if (value.length <= max) {
       return value;
     }
@@ -50,6 +51,8 @@ function extractPagePayloadInPage(selectionText: string) {
   const url = window.location.href;
   const title = normalize(document.title) || 'Untitled page';
   const selection = normalize(selectionText);
+  console.log('[pocket-ai] extracting:', title);
+  console.log('[pocket-ai] body length:', (document.body?.innerText ?? '').length);
 
   try {
     console.log('[pocket-ai] extraction step 1 readability begin', { url });
@@ -67,13 +70,16 @@ function extractPagePayloadInPage(selectionText: string) {
           length: readableText.length,
         });
 
-        return {
+        const readabilityResult = {
           title: normalize(article.title) || title,
           url,
           content: truncate(readableText),
           source: 'readability' as const,
           selection: selection || undefined,
         };
+        console.log('[pocket-ai] result:', readabilityResult.source, readabilityResult.content.length);
+
+        return readabilityResult;
       }
 
       console.log('[pocket-ai] extraction step 1 readability empty', {
@@ -101,7 +107,7 @@ function extractPagePayloadInPage(selectionText: string) {
         length: text.length,
       });
 
-      return {
+      const domResult = {
         title,
         url,
         content: truncate(text),
@@ -109,29 +115,37 @@ function extractPagePayloadInPage(selectionText: string) {
         selection: selection || undefined,
         warning: `Using DOM fallback selector: ${selector}`,
       };
+      console.log('[pocket-ai] result:', domResult.source, domResult.content.length);
+
+      return domResult;
     }
   }
 
   console.log('[pocket-ai] extraction step 3 body fallback begin', { url });
   const bodyText = normalize(document.body?.innerText ?? '');
-  if (bodyText.length > 100) {
+  const rootText = normalize((document.documentElement as HTMLElement | null)?.innerText ?? '');
+  const lastResortText = rootText || bodyText;
+  if (lastResortText.length > 100) {
     console.log('[pocket-ai] extraction step 3 body fallback success', {
       url,
-      length: bodyText.length,
+      length: lastResortText.length,
     });
 
-    return {
+    const bodyResult = {
       title,
       url,
-      content: truncate(bodyText),
+      content: truncate(lastResortText),
       source: 'body' as const,
       selection: selection || undefined,
       warning: 'Using body text fallback extraction.',
     };
+    console.log('[pocket-ai] result:', bodyResult.source, bodyResult.content.length);
+
+    return bodyResult;
   }
 
   console.log('[pocket-ai] extraction step 4 unsupported', { url });
-  return {
+  const unsupportedResult = {
     title,
     url,
     content: '',
@@ -139,6 +153,9 @@ function extractPagePayloadInPage(selectionText: string) {
     selection: selection || undefined,
     warning: 'No extractable content found on this page.',
   };
+  console.log('[pocket-ai] result:', unsupportedResult.source, unsupportedResult.content.length);
+
+  return unsupportedResult;
 }
 
 async function syncEmbedRules(): Promise<void> {

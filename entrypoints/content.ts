@@ -131,6 +131,9 @@ export default defineContentScript({
     };
 
     const requestBackgroundSnapshot = (reason: string) => {
+      console.log('[pocket-ai] extracting:', document.title);
+      console.log('[pocket-ai] body length:', document.body?.innerText.length ?? 0);
+
       void chrome.runtime.sendMessage({
         type: 'REQUEST_BACKGROUND_PAGE_SNAPSHOT',
         reason,
