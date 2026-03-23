@@ -24,7 +24,7 @@ export default defineConfig({
     commands: {
       'toggle-sidepanel': {
         suggested_key: {
-          default: 'Alt+Shift+S',
+          default: 'Alt+Shift+P',
         },
         description: 'Toggle Pocket AI side panel',
       },

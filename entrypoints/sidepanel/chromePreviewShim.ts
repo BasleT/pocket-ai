@@ -22,7 +22,10 @@ function createListenerSet<T>(): ListenerSet<T> & { values: () => T[] } {
   };
 }
 
-function createStorageArea() {
+function createStorageArea(
+  areaName: 'local' | 'session',
+  emitChange: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, areaName: string) => void,
+) {
   const data = new Map<string, unknown>();
 
   return {
@@ -48,16 +51,28 @@ function createStorageArea() {
     },
 
     async set(values: Record<string, unknown>) {
+      const changes: Record<string, { oldValue?: unknown; newValue?: unknown }> = {};
+
       for (const [key, value] of Object.entries(values)) {
+        const oldValue = data.get(key);
         data.set(key, value);
+        changes[key] = { oldValue, newValue: value };
       }
+
+      emitChange(changes, areaName);
     },
 
     async remove(keys: string | string[]) {
       const keyList = Array.isArray(keys) ? keys : [keys];
+      const changes: Record<string, { oldValue?: unknown; newValue?: unknown }> = {};
+
       for (const key of keyList) {
+        const oldValue = data.get(key);
         data.delete(key);
+        changes[key] = { oldValue, newValue: undefined };
       }
+
+      emitChange(changes, areaName);
     },
   };
 }
@@ -74,6 +89,10 @@ function installChromePreviewShim() {
   }
 
   const runtimeMessageListeners = createListenerSet<RuntimeMessageListener>();
+  const storageChangedListeners = createListenerSet<
+    (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, areaName: string) => void
+  >();
+  const tabsActivatedListeners = createListenerSet<(activeInfo: { tabId: number }) => void>();
 
   const emitRuntimeMessage = (message: unknown) => {
     for (const listener of runtimeMessageListeners.values()) {
@@ -81,8 +100,17 @@ function installChromePreviewShim() {
     }
   };
 
-  const storageLocal = createStorageArea();
-  const storageSession = createStorageArea();
+  const emitStorageChange = (
+    changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+    areaName: string,
+  ) => {
+    for (const listener of storageChangedListeners.values()) {
+      listener(changes, areaName);
+    }
+  };
+
+  const storageLocal = createStorageArea('local', emitStorageChange);
+  const storageSession = createStorageArea('session', emitStorageChange);
 
   const chromeShim = {
     runtime: {
@@ -130,6 +158,34 @@ function installChromePreviewShim() {
             ok: true,
             message: `Preview mode: ${typed.provider ?? 'provider'} connection simulated`,
           };
+        }
+
+        if (typed?.type === 'GET_PAGE_IMAGES') {
+          return {
+            ok: true,
+            images: [
+              'https://picsum.photos/seed/pocketai-1/320/200',
+              'https://picsum.photos/seed/pocketai-2/320/200',
+              'https://picsum.photos/seed/pocketai-3/320/200',
+            ],
+          };
+        }
+
+        if (typed?.type === 'RUN_OCR_ON_IMAGE' && typeof (typed as { imageUrl?: unknown }).imageUrl === 'string') {
+          const imageUrl = (typed as { imageUrl: string }).imageUrl;
+          window.setTimeout(() => {
+            emitRuntimeMessage({
+              type: 'OCR_RESULT_UPDATED',
+              result: {
+                text: `Preview OCR text extracted from: ${imageUrl}`,
+                language: 'eng',
+                imageUrl,
+                capturedAt: Date.now(),
+              },
+            });
+          }, 250);
+
+          return { ok: true };
         }
 
         if (typed?.type === 'KEEP_ALIVE') {
@@ -206,6 +262,40 @@ function installChromePreviewShim() {
     storage: {
       local: storageLocal,
       session: storageSession,
+      onChanged: {
+        addListener(
+          listener: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, areaName: string) => void,
+        ) {
+          storageChangedListeners.addListener(listener);
+        },
+        removeListener(
+          listener: (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>, areaName: string) => void,
+        ) {
+          storageChangedListeners.removeListener(listener);
+        },
+      },
+    },
+
+    tabs: {
+      async query() {
+        return [
+          {
+            id: 1,
+            active: true,
+            currentWindow: true,
+            url: 'https://example.com/preview',
+            title: 'Preview Page',
+          },
+        ];
+      },
+      onActivated: {
+        addListener(listener: (activeInfo: { tabId: number }) => void) {
+          tabsActivatedListeners.addListener(listener);
+        },
+        removeListener(listener: (activeInfo: { tabId: number }) => void) {
+          tabsActivatedListeners.removeListener(listener);
+        },
+      },
     },
   };
 

@@ -1,5 +1,6 @@
-import type { ProviderId } from '../components/providers/providerConfig';
 import type { OcrLanguage } from '../lib/extractors/ocr';
+
+export type ProviderId = 'chatgpt' | 'claude' | 'gemini' | 'grok' | 'deepseek';
 
 export type ApiProviderId = 'groq' | 'openai' | 'anthropic' | 'google';
 

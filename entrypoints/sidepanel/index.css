@@ -1,0 +1,271 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-base: #0d0d0d;
+    --bg-surface: #141414;
+    --bg-elevated: #1c1c1c;
+    --bg-overlay: rgba(255, 255, 255, 0.04);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.12);
+    --text-primary: #f0f0f0;
+    --text-secondary: #888888;
+    --text-muted: #555555;
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    --accent-subtle: rgba(124, 58, 237, 0.15);
+    --accent-glow: rgba(124, 58, 237, 0.3);
+    font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+  }
+
+  html.light {
+    --bg-base: #ffffff;
+    --bg-surface: #f9f9f9;
+    --bg-elevated: #f0f0f0;
+    --bg-overlay: rgba(0, 0, 0, 0.03);
+    --border: rgba(0, 0, 0, 0.08);
+    --border-strong: rgba(0, 0, 0, 0.12);
+    --text-primary: #0d0d0d;
+    --text-secondary: #666666;
+    --text-muted: #aaaaaa;
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    --accent-subtle: rgba(124, 58, 237, 0.1);
+    --accent-glow: rgba(124, 58, 237, 0.2);
+  }
+
+  html,
+  body,
+  #root {
+    margin: 0;
+    height: 100%;
+    background: var(--bg-base);
+    color: var(--text-primary);
+  }
+
+  * {
+    border-color: var(--border);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--border);
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *:focus {
+    outline: none;
+  }
+
+  *:focus-visible {
+    box-shadow: 0 0 0 1px var(--accent-glow), 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+}
+
+@layer components {
+  .ui-shell {
+    @apply flex h-screen w-full overflow-hidden;
+    background: var(--bg-base);
+    color: var(--text-primary);
+  }
+
+  .ui-panel {
+    @apply flex min-w-0 flex-1 flex-col;
+    background: var(--bg-base);
+  }
+
+  .ui-panel-header {
+    @apply flex h-12 items-center justify-between border-b px-4;
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--bg-base) 88%, transparent);
+    backdrop-filter: blur(10px);
+  }
+
+  .ui-brand {
+    @apply text-xs font-semibold tracking-[0.22em] uppercase;
+    color: var(--text-muted);
+  }
+
+  .ui-page-title {
+    @apply truncate text-sm;
+    color: var(--text-secondary);
+  }
+
+  .ui-panel-body {
+    @apply min-h-0 flex-1 overflow-y-auto;
+  }
+
+  .ui-rail {
+    @apply flex w-[52px] shrink-0 flex-col items-center px-[6px] py-[6px];
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border);
+  }
+
+  .ui-rail-stack {
+    @apply flex w-full flex-1 flex-col items-center gap-[6px];
+  }
+
+  .ui-rail-btn {
+    @apply flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg;
+    color: var(--text-muted);
+    transition: all 150ms ease;
+  }
+
+  .ui-rail-btn:hover {
+    color: var(--text-secondary);
+    background: var(--bg-overlay);
+  }
+
+  .ui-rail-btn-active {
+    color: var(--accent);
+    background: var(--accent-subtle);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  .ui-card {
+    @apply rounded-2xl border;
+    border-color: var(--border);
+    background: var(--bg-elevated);
+  }
+
+  .ui-subtle {
+    color: var(--text-secondary);
+  }
+
+  .ui-muted {
+    color: var(--text-muted);
+  }
+
+  .ui-input {
+    @apply rounded-xl border px-3 py-2 text-sm;
+    border-color: var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .ui-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+
+  .ui-btn {
+    @apply cursor-pointer rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150;
+  }
+
+  .ui-btn-accent {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .ui-btn-accent:hover {
+    background: var(--accent-hover);
+  }
+
+  .ui-btn-accent:disabled {
+    @apply cursor-not-allowed opacity-40;
+  }
+
+  .ui-btn-ghost {
+    @apply border;
+    border-color: var(--border);
+    color: var(--text-secondary);
+    background: transparent;
+  }
+
+  .ui-btn-ghost:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-overlay);
+    color: var(--text-primary);
+  }
+
+  .ui-message-user {
+    @apply rounded-2xl rounded-br-sm border px-4 py-3 text-sm;
+    background: var(--accent-subtle);
+    border-color: var(--border);
+    color: var(--text-primary);
+  }
+
+  .ui-message-assistant {
+    @apply rounded-2xl rounded-bl-sm border px-4 py-3 text-sm;
+    background: var(--bg-elevated);
+    border-color: var(--border);
+    color: var(--text-primary);
+  }
+
+  .ui-input-bar {
+    @apply border-t p-3;
+    border-color: var(--border);
+    background: var(--bg-surface);
+  }
+
+  .ui-quick-chip {
+    @apply cursor-pointer rounded-full border px-3 py-1 text-xs transition-all duration-150;
+    border-color: var(--border);
+    color: var(--text-secondary);
+    background: transparent;
+  }
+
+  .ui-quick-chip:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--bg-overlay);
+  }
+
+  .ui-overlay {
+    @apply rounded-2xl border p-4;
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .ui-empty {
+    @apply flex min-h-0 flex-1 flex-col items-center justify-center gap-3 text-center;
+    color: var(--text-secondary);
+  }
+
+  .ui-stream-cursor {
+    color: var(--accent);
+    animation: stream-cursor 1s steps(2, end) infinite;
+  }
+
+  .panel-animate {
+    animation: panel-enter 150ms ease;
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes stream-cursor {
+  0%,
+  49% {
+    opacity: 1;
+  }
+
+  50%,
+  100% {
+    opacity: 0.2;
+  }
+}

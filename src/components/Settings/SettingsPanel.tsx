@@ -1,188 +1,205 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { EMBED_PROVIDERS, type ProviderId } from '../providers/providerConfig';
-import type {
-  ApiProviderId,
-  ApiProviderSecrets,
-  ConnectionTestStatus,
-  EmbedProviderToggles,
-  ThemeMode,
+import { Moon, Sun } from 'lucide-react';
+
+import { CHAT_MODELS } from '../../lib/ai';
+import { storageGetSecret, storageRemoveSecret, storageSet, storageSetSecret } from '../../lib/storage';
+import type { ChatModelId } from '../../types/chat';
+import {
+  API_KEY_FIELD_MAP,
+  type ApiProviderId,
+  type ConnectionTestStatus,
+  type TestConnectionResponse,
+  type ThemeMode,
 } from '../../types/settings';
 
+const THEME_KEY = 'settings.themeMode';
+
 type SettingsPanelProps = {
-  embedProviderToggles: EmbedProviderToggles;
-  apiKeyConfigured: Record<ApiProviderId, boolean>;
-  connectionStatuses: Partial<Record<ApiProviderId, ConnectionTestStatus>>;
+  selectedModelId: ChatModelId;
+  onModelChange: (modelId: ChatModelId) => void;
   themeMode: ThemeMode;
-  onProviderToggle: (providerId: ProviderId, enabled: boolean) => void;
-  onThemeModeChange: (mode: ThemeMode) => void;
-  onSaveApiKey: (provider: ApiProviderId, value: string) => Promise<void>;
-  onClearApiKey: (provider: ApiProviderId) => Promise<void>;
-  onTestConnection: (provider: ApiProviderId) => Promise<void>;
+  onThemeModeChange: (theme: ThemeMode) => void;
 };
 
-type TabId = 'providers' | 'keys' | 'connections';
-
-const API_PROVIDER_LABELS: Record<ApiProviderId, string> = {
-  groq: 'Groq',
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  google: 'Google AI Studio',
-};
-
-const API_PROVIDER_ORDER: ApiProviderId[] = ['groq', 'openai', 'anthropic', 'google'];
+const PROVIDERS: ApiProviderId[] = ['groq', 'openai', 'anthropic', 'google'];
 
 export function SettingsPanel({
-  embedProviderToggles,
-  apiKeyConfigured,
-  connectionStatuses,
+  selectedModelId,
+  onModelChange,
   themeMode,
-  onProviderToggle,
   onThemeModeChange,
-  onSaveApiKey,
-  onClearApiKey,
-  onTestConnection,
 }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('providers');
-  const [draftKeys, setDraftKeys] = useState<Partial<ApiProviderSecrets>>({});
+  const [apiConfigured, setApiConfigured] = useState<Record<ApiProviderId, boolean>>({
+    groq: false,
+    openai: false,
+    anthropic: false,
+    google: false,
+  });
+  const [apiInputs, setApiInputs] = useState<Record<ApiProviderId, string>>({
+    groq: '',
+    openai: '',
+    anthropic: '',
+    google: '',
+  });
+  const [connectionStatuses, setConnectionStatuses] = useState<
+    Partial<Record<ApiProviderId, ConnectionTestStatus>>
+  >({});
+
+  useEffect(() => {
+    const load = async () => {
+      const [groqKey, openaiKey, anthropicKey, googleKey] = await Promise.all([
+        storageGetSecret(API_KEY_FIELD_MAP.groq),
+        storageGetSecret(API_KEY_FIELD_MAP.openai),
+        storageGetSecret(API_KEY_FIELD_MAP.anthropic),
+        storageGetSecret(API_KEY_FIELD_MAP.google),
+      ]);
+
+      setApiConfigured({
+        groq: Boolean(groqKey),
+        openai: Boolean(openaiKey),
+        anthropic: Boolean(anthropicKey),
+        google: Boolean(googleKey),
+      });
+    };
+
+    void load();
+  }, []);
+
+  const saveKey = async (provider: ApiProviderId) => {
+    const value = apiInputs[provider].trim();
+    if (!value) {
+      return;
+    }
+
+    await storageSetSecret(API_KEY_FIELD_MAP[provider], value);
+    setApiConfigured((previous) => ({ ...previous, [provider]: true }));
+    setApiInputs((previous) => ({ ...previous, [provider]: '' }));
+  };
+
+  const clearKey = async (provider: ApiProviderId) => {
+    await storageRemoveSecret(API_KEY_FIELD_MAP[provider]);
+    setApiConfigured((previous) => ({ ...previous, [provider]: false }));
+  };
+
+  const testConnection = async (provider: ApiProviderId) => {
+    const response = (await chrome.runtime.sendMessage({
+      type: 'TEST_PROVIDER_CONNECTION',
+      provider,
+    })) as TestConnectionResponse;
+
+    setConnectionStatuses((previous) => ({
+      ...previous,
+      [provider]: {
+        provider,
+        ok: response.ok,
+        message: response.message,
+      },
+    }));
+  };
 
   return (
-    <section className="border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-      <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Settings</p>
+    <section className="min-h-0 flex-1 overflow-y-auto p-4">
+      <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+        Settings
+      </h2>
 
-      <div className="mt-2 inline-flex rounded-md border border-slate-200 p-0.5 text-xs dark:border-slate-700">
-        {([
-          ['providers', 'Providers'],
-          ['keys', 'API Keys'],
-          ['connections', 'Connections'],
-        ] as const).map(([tabId, label]) => (
+      <div className="ui-card mt-3 p-3">
+        <label className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Model
+        </label>
+        <select
+          className="ui-input mt-1 h-10 w-full"
+          value={selectedModelId}
+          onChange={(event) => onModelChange(event.target.value as ChatModelId)}
+        >
+          {CHAT_MODELS.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+
+        <div className="mt-3">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Dark mode
+          </p>
           <button
-            key={tabId}
             type="button"
-            onClick={() => setActiveTab(tabId)}
-            className={`rounded px-2 py-1 ${
-              activeTab === tabId
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                : 'text-slate-600 dark:text-slate-300'
-            }`}
-            aria-label={`Show ${label} settings`}
+            onClick={() => {
+              const nextTheme: ThemeMode = themeMode === 'dark' ? 'light' : 'dark';
+              onThemeModeChange(nextTheme);
+              void storageSet('local', THEME_KEY, nextTheme);
+            }}
+            className="ui-btn ui-btn-ghost mt-2 inline-flex items-center gap-2"
           >
-            {label}
+            {themeMode === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
+            {themeMode === 'dark' ? 'Dark enabled' : 'Light enabled'}
           </button>
-        ))}
+        </div>
       </div>
 
-      {activeTab === 'providers' ? (
-        <div className="mt-2 space-y-1">
-          <label className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-200">
-            <span>Theme</span>
-            <select
-              value={themeMode}
-              onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
-              className="rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
-              aria-label="Choose theme mode"
-            >
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </label>
-          {EMBED_PROVIDERS.map((provider) => (
-            <label
-              key={provider.id}
-              className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-200"
-            >
-              <span>{provider.name}</span>
-              <input
-                type="checkbox"
-                checked={embedProviderToggles[provider.id] ?? true}
-                onChange={(event) => onProviderToggle(provider.id, event.target.checked)}
-                aria-label={`Toggle ${provider.name} provider`}
-              />
-            </label>
-          ))}
-        </div>
-      ) : null}
-
-      {activeTab === 'keys' ? (
-        <div className="mt-2 space-y-2">
-          {API_PROVIDER_ORDER.map((provider) => {
-            const field = `${provider}ApiKey` as keyof ApiProviderSecrets;
-            const draftValue = draftKeys[field] ?? '';
-
-            return (
-              <div key={provider} className="rounded border border-slate-200 p-2 dark:border-slate-700">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-slate-700 dark:text-slate-100">{API_PROVIDER_LABELS[provider]}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {apiKeyConfigured[provider] ? 'Configured' : 'Not configured'}
-                  </p>
-                </div>
-                <input
-                  type="password"
-                  value={draftValue}
-                  onChange={(event) =>
-                    setDraftKeys((previous) => ({
-                      ...previous,
-                      [field]: event.target.value,
-                    }))
-                  }
-                  placeholder={`Enter ${API_PROVIDER_LABELS[provider]} key`}
-                  className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-                  aria-label={`${API_PROVIDER_LABELS[provider]} API key`}
-                />
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void onSaveApiKey(provider, draftValue)}
-                    className="rounded bg-slate-900 px-2 py-1 text-xs text-white"
-                    aria-label={`Save ${API_PROVIDER_LABELS[provider]} API key`}
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void onClearApiKey(provider)}
-                    className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-300"
-                    aria-label={`Clear ${API_PROVIDER_LABELS[provider]} API key`}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {activeTab === 'connections' ? (
-        <div className="mt-2 space-y-2">
-          {API_PROVIDER_ORDER.map((provider) => (
-            <div key={provider} className="rounded border border-slate-200 p-2 dark:border-slate-700">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-slate-700 dark:text-slate-100">{API_PROVIDER_LABELS[provider]}</p>
-                <button
-                  type="button"
-                  onClick={() => void onTestConnection(provider)}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-300"
-                  aria-label={`Test ${API_PROVIDER_LABELS[provider]} connection`}
-                >
-                  Test connection
-                </button>
-              </div>
-              {connectionStatuses[provider] ? (
-                <p
-                  className={`mt-1 text-[11px] ${
-                    connectionStatuses[provider]?.ok ? 'text-emerald-700' : 'text-rose-700'
-                  }`}
-                >
-                  {connectionStatuses[provider]?.ok ? '✅' : '❌'} {connectionStatuses[provider]?.message}
-                </p>
-              ) : null}
+      <div className="mt-3 space-y-2">
+        {PROVIDERS.map((provider) => (
+          <div key={provider} className="ui-card p-3">
+            <p className="text-xs font-medium capitalize" style={{ color: 'var(--text-primary)' }}>
+              {provider}
+            </p>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+              {apiConfigured[provider] ? 'API key saved' : 'API key not configured'}
+            </p>
+            <input
+              type="password"
+              value={apiInputs[provider]}
+              onChange={(event) =>
+                setApiInputs((previous) => ({
+                  ...previous,
+                  [provider]: event.target.value,
+                }))
+              }
+              placeholder={`Enter ${provider} API key`}
+              className="ui-input mt-2 h-10 w-full"
+            />
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void saveKey(provider);
+                }}
+                className="ui-btn ui-btn-accent"
+              >
+                Save key
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void clearKey(provider);
+                }}
+                className="ui-btn ui-btn-ghost"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void testConnection(provider);
+                }}
+                className="ui-btn ui-btn-ghost"
+              >
+                Test
+              </button>
             </div>
-          ))}
-        </div>
-      ) : null}
+            {connectionStatuses[provider] ? (
+              <p
+                className="mt-2 text-[11px]"
+                style={{ color: connectionStatuses[provider]?.ok ? '#34d399' : '#fb7185' }}
+              >
+                {connectionStatuses[provider]?.ok ? 'Connected:' : 'Failed:'} {connectionStatuses[provider]?.message}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

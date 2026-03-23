@@ -1,30 +1,22 @@
 import { useState } from 'react';
 
+import type { ChatModel } from '../../lib/ai';
+import type { ChatModelId } from '../../types/chat';
+
 type ChatInputProps = {
-  isDisabled?: boolean;
-  value?: string;
-  onChange?: (value: string) => void;
-  onSend: (text: string) => void;
+  isSending: boolean;
+  onSend: (value: string) => void;
+  modelId: ChatModelId;
+  models: ChatModel[];
+  onModelChange: (modelId: ChatModelId) => void;
 };
 
-export function ChatInput({ isDisabled = false, value, onChange, onSend }: ChatInputProps) {
-  const [internalValue, setInternalValue] = useState('');
-
-  const isControlled = typeof value === 'string';
-  const currentValue = isControlled ? value : internalValue;
-
-  const setValue = (nextValue: string) => {
-    if (isControlled) {
-      onChange?.(nextValue);
-      return;
-    }
-
-    setInternalValue(nextValue);
-  };
+export function ChatInput({ isSending, onSend, modelId, models, onModelChange }: ChatInputProps) {
+  const [value, setValue] = useState('');
 
   const submit = () => {
-    const trimmed = currentValue.trim();
-    if (!trimmed || isDisabled) {
+    const trimmed = value.trim();
+    if (!trimmed) {
       return;
     }
 
@@ -33,28 +25,46 @@ export function ChatInput({ isDisabled = false, value, onChange, onSend }: ChatI
   };
 
   return (
-    <div className="border-t border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
-      <textarea
-        value={currentValue}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && event.ctrlKey) {
-            event.preventDefault();
-            submit();
-          }
-        }}
-        placeholder="Ask anything... (Ctrl+Enter to send)"
-        className="h-24 w-full resize-none rounded-md border border-slate-300 p-2 text-sm outline-none transition focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-        disabled={isDisabled}
-        aria-label="Chat input"
-      />
-      <div className="mt-2 flex justify-end">
+    <div className="ui-input-bar">
+      <div className="mb-2 flex items-center justify-between">
+        <label htmlFor="chat-model" className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Model
+        </label>
+        <select
+          id="chat-model"
+          value={modelId}
+          onChange={(event) => onModelChange(event.target.value as ChatModelId)}
+          className="cursor-pointer border-0 bg-transparent text-xs transition-colors"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          {models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-end gap-2">
+        <textarea
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+          rows={2}
+          placeholder="Ask about this page..."
+          className="ui-input max-h-40 min-h-[42px] w-full resize-none"
+          aria-label="Chat message input"
+        />
         <button
           type="button"
           onClick={submit}
-          disabled={isDisabled || currentValue.trim().length === 0}
-          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
-          aria-label="Send message"
+          disabled={isSending || !value.trim()}
+          className="ui-btn ui-btn-accent h-10 shrink-0"
         >
           Send
         </button>

@@ -8,7 +8,7 @@
 ## Core Flows
 
 - [ ] Side panel opens from toolbar action
-- [ ] Shortcut `Alt+Shift+S` toggles side panel
+- [ ] Shortcut `Alt+Shift+P` toggles side panel
 - [ ] Embed tabs switch correctly
 - [ ] API chat streams response tokens
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelMessage } from 'ai';
 
-import { GROQ_MODELS, type StreamChatDependencies, streamChat } from './ai';
+import { GROQ_MODELS, buildPageContextSystemPrompt, type StreamChatDependencies, streamChat } from './ai';
 
 describe('streamChat', () => {
   it('exposes the expected free Groq model IDs', () => {
@@ -45,5 +45,22 @@ describe('streamChat', () => {
     }
 
     expect(received).toEqual(chunks);
+  });
+});
+
+describe('buildPageContextSystemPrompt', () => {
+  it('injects title and truncates long page content', () => {
+    const longContent = 'A'.repeat(50_000);
+
+    const prompt = buildPageContextSystemPrompt({
+      title: 'Example Title',
+      url: 'https://example.com/page',
+      content: longContent,
+      source: 'readability',
+    });
+
+    expect(prompt).toContain('Example Title');
+    expect(prompt).toContain('https://example.com/page');
+    expect(prompt.length).toBeLessThan(30_000);
   });
 });
