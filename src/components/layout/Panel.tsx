@@ -1,4 +1,5 @@
 import { ChatPanel } from '../Chat/ChatPanel';
+import { SummarizePanel } from '../summarize/SummarizePanel';
 import type { ActivePanel } from './types';
 import type { PageContentResult } from '../../types/page';
 
@@ -39,9 +40,20 @@ type PanelProps = {
   pageTitle: string;
   pageWarning?: string;
   pageContext: PageContentResult | null;
+  chatSendRequest?: { id: string; text: string } | null;
+  onChatSendRequestHandled?: (id: string) => void;
+  onAskFollowUp: (summary: string) => void;
 };
 
-export function Panel({ activePanel, pageTitle, pageWarning, pageContext }: PanelProps) {
+export function Panel({
+  activePanel,
+  pageTitle,
+  pageWarning,
+  pageContext,
+  chatSendRequest,
+  onChatSendRequestHandled,
+  onAskFollowUp,
+}: PanelProps) {
   const content = PANEL_CONTENT[activePanel];
 
   return (
@@ -55,7 +67,13 @@ export function Panel({ activePanel, pageTitle, pageWarning, pageContext }: Pane
       </header>
 
       {activePanel === 'chat' ? (
-        <ChatPanel pageContext={pageContext} />
+        <ChatPanel
+          pageContext={pageContext}
+          sendRequest={chatSendRequest}
+          onSendRequestHandled={onChatSendRequestHandled}
+        />
+      ) : activePanel === 'summarize' ? (
+        <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4">

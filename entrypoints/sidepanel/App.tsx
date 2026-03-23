@@ -6,6 +6,7 @@ import { usePageContext } from '../../src/lib/pageContext';
 
 function App() {
   const [activePanel, setActivePanel] = useState<ActivePanel>('chat');
+  const [chatSendRequest, setChatSendRequest] = useState<{ id: string; text: string } | null>(null);
   const { page, loading, error } = usePageContext();
 
   const pageTitle = loading
@@ -21,6 +22,17 @@ function App() {
       pageTitle={pageTitle}
       pageWarning={pageWarning}
       pageContext={page}
+      chatSendRequest={chatSendRequest}
+      onChatSendRequestHandled={(id) => {
+        setChatSendRequest((previous) => (previous?.id === id ? null : previous));
+      }}
+      onAskFollowUp={(summary) => {
+        setActivePanel('chat');
+        setChatSendRequest({
+          id: crypto.randomUUID(),
+          text: `Use this summary as context and answer follow-up questions:\n\n${summary}`,
+        });
+      }}
     />
   );
 }

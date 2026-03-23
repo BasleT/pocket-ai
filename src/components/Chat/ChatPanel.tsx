@@ -54,9 +54,11 @@ function toSerializableMessages(
 
 type ChatPanelProps = {
   pageContext: PageContentResult | null;
+  sendRequest?: { id: string; text: string } | null;
+  onSendRequestHandled?: (id: string) => void;
 };
 
-export function ChatPanel({ pageContext }: ChatPanelProps) {
+export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled }: ChatPanelProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -213,6 +215,15 @@ export function ChatPanel({ pageContext }: ChatPanelProps) {
     setLastFailedPrompt(prompt);
     sendPrompt(prompt);
   };
+
+  useEffect(() => {
+    if (!sendRequest) {
+      return;
+    }
+
+    handleSend(sendRequest.text);
+    onSendRequestHandled?.(sendRequest.id);
+  }, [onSendRequestHandled, sendRequest]);
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">

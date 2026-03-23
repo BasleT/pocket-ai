@@ -18,9 +18,21 @@ type ShellProps = {
   pageTitle: string;
   pageWarning?: string;
   pageContext: PageContentResult | null;
+  chatSendRequest?: { id: string; text: string } | null;
+  onChatSendRequestHandled?: (id: string) => void;
+  onAskFollowUp: (summary: string) => void;
 };
 
-export function Shell({ activePanel, onSelectPanel, pageTitle, pageWarning, pageContext }: ShellProps) {
+export function Shell({
+  activePanel,
+  onSelectPanel,
+  pageTitle,
+  pageWarning,
+  pageContext,
+  chatSendRequest,
+  onChatSendRequestHandled,
+  onAskFollowUp,
+}: ShellProps) {
   return (
     <main className="flex h-screen w-full overflow-hidden bg-white text-text">
       <Panel
@@ -28,6 +40,9 @@ export function Shell({ activePanel, onSelectPanel, pageTitle, pageWarning, page
         pageTitle={pageTitle}
         pageWarning={pageWarning}
         pageContext={pageContext}
+        chatSendRequest={chatSendRequest}
+        onChatSendRequestHandled={onChatSendRequestHandled}
+        onAskFollowUp={onAskFollowUp}
       />
       <IconRail activePanel={activePanel} items={RAIL_ITEMS} onSelect={onSelectPanel} />
     </main>
