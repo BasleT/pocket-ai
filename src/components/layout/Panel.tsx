@@ -85,7 +85,7 @@ export function Panel({
         </div>
       ) : null}
 
-      <div key={activePanel} className="panel-animate min-h-0 flex-1">
+      <div key={activePanel} className="ui-panel-body panel-animate">
         {activePanel === 'chat' ? (
           <ChatPanel
             pageContext={pageContext}
