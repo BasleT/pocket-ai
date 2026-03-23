@@ -1,4 +1,5 @@
 import { ChatPanel } from '../Chat/ChatPanel';
+import { PdfPanel } from '../pdf/PdfPanel';
 import { SummarizePanel } from '../summarize/SummarizePanel';
 import { YouTubePanel } from '../youtube/YouTubePanel';
 import type { ActivePanel } from './types';
@@ -77,6 +78,8 @@ export function Panel({
         <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
       ) : activePanel === 'youtube' ? (
         <YouTubePanel onAskAboutVideo={onAskFollowUp} />
+      ) : activePanel === 'pdf' ? (
+        <PdfPanel onAskAboutPdf={onAskFollowUp} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4">
