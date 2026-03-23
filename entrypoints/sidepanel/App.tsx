@@ -17,7 +17,7 @@ function App() {
   const [activePanel, setActivePanel] = useState<ActivePanel>('chat');
   const [chatSendRequest, setChatSendRequest] = useState<{ id: string; text: string } | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<ChatModelId>(DEFAULT_MODEL_ID);
-  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
   const { page, loading, error } = usePageContext();
 
   const pageTitle = loading
@@ -37,7 +37,7 @@ function App() {
         setSelectedModelId(storedModel as ChatModelId);
       }
 
-      if (storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'system') {
+      if (storedTheme === 'light' || storedTheme === 'dark') {
         setThemeMode(storedTheme);
       }
     };
@@ -50,10 +50,11 @@ function App() {
   }, [selectedModelId]);
 
   useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const useDark = themeMode === 'dark' || (themeMode === 'system' && prefersDark);
+    const html = document.documentElement;
+    const useDark = themeMode === 'dark';
 
-    document.documentElement.classList.toggle('dark', useDark);
+    html.classList.toggle('dark', useDark);
+    html.classList.toggle('light', !useDark);
   }, [themeMode]);
 
   return (

@@ -1,3 +1,5 @@
+import { FileSearch, FileText, MessageSquare, PlaySquare, Settings } from 'lucide-react';
+
 import { IconRail } from './IconRail';
 import { Panel } from './Panel';
 import type { ActivePanel, RailItem } from './types';
@@ -6,12 +8,12 @@ import type { PageContentResult } from '../../types/page';
 import type { ThemeMode } from '../../types/settings';
 
 const RAIL_ITEMS: RailItem[] = [
-  { id: 'chat', icon: '💬', label: 'Chat' },
-  { id: 'summarize', icon: '📄', label: 'Summarize' },
-  { id: 'youtube', icon: '🎥', label: 'YouTube' },
-  { id: 'pdf', icon: '📁', label: 'PDF' },
-  { id: 'ocr', icon: '🔍', label: 'OCR' },
-  { id: 'settings', icon: '⚙️', label: 'Settings' },
+  { id: 'chat', icon: MessageSquare, label: 'Chat' },
+  { id: 'summarize', icon: FileText, label: 'Summarize' },
+  { id: 'youtube', icon: PlaySquare, label: 'YouTube' },
+  { id: 'pdf', icon: FileText, label: 'PDF' },
+  { id: 'ocr', icon: FileSearch, label: 'OCR' },
+  { id: 'settings', icon: Settings, label: 'Settings' },
 ];
 
 type ShellProps = {
@@ -44,7 +46,7 @@ export function Shell({
   onThemeModeChange,
 }: ShellProps) {
   return (
-    <main className="flex h-screen w-full overflow-hidden bg-white text-text">
+    <main className="ui-shell">
       <Panel
         activePanel={activePanel}
         pageTitle={pageTitle}

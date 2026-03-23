@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { Moon, Sun } from 'lucide-react';
+
 import { CHAT_MODELS } from '../../lib/ai';
 import { storageGetSecret, storageRemoveSecret, storageSet, storageSetSecret } from '../../lib/storage';
 import type { ChatModelId } from '../../types/chat';
@@ -98,12 +100,16 @@ export function SettingsPanel({
 
   return (
     <section className="min-h-0 flex-1 overflow-y-auto p-4">
-      <h2 className="text-sm font-semibold text-slate-900">Settings</h2>
+      <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+        Settings
+      </h2>
 
-      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-        <label className="text-xs text-slate-500">Model</label>
+      <div className="ui-card mt-3 p-3">
+        <label className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Model
+        </label>
         <select
-          className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm"
+          className="ui-input mt-1 h-10 w-full"
           value={selectedModelId}
           onChange={(event) => onModelChange(event.target.value as ChatModelId)}
         >
@@ -114,27 +120,32 @@ export function SettingsPanel({
           ))}
         </select>
 
-        <label className="mt-3 block text-xs text-slate-500">Theme</label>
-        <select
-          className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm"
-          value={themeMode}
-          onChange={(event) => {
-            const nextTheme = event.target.value as ThemeMode;
-            onThemeModeChange(nextTheme);
-            void storageSet('local', THEME_KEY, nextTheme);
-          }}
-        >
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
+        <div className="mt-3">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Dark mode
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const nextTheme: ThemeMode = themeMode === 'dark' ? 'light' : 'dark';
+              onThemeModeChange(nextTheme);
+              void storageSet('local', THEME_KEY, nextTheme);
+            }}
+            className="ui-btn ui-btn-ghost mt-2 inline-flex items-center gap-2"
+          >
+            {themeMode === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
+            {themeMode === 'dark' ? 'Dark enabled' : 'Light enabled'}
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 space-y-2">
         {PROVIDERS.map((provider) => (
-          <div key={provider} className="rounded-xl border border-slate-200 bg-white p-3">
-            <p className="text-xs font-medium text-slate-700 capitalize">{provider}</p>
-            <p className="mt-1 text-[11px] text-slate-500">
+          <div key={provider} className="ui-card p-3">
+            <p className="text-xs font-medium capitalize" style={{ color: 'var(--text-primary)' }}>
+              {provider}
+            </p>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
               {apiConfigured[provider] ? 'API key saved' : 'API key not configured'}
             </p>
             <input
@@ -147,7 +158,7 @@ export function SettingsPanel({
                 }))
               }
               placeholder={`Enter ${provider} API key`}
-              className="mt-2 h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm"
+              className="ui-input mt-2 h-10 w-full"
             />
             <div className="mt-2 flex gap-2">
               <button
@@ -155,7 +166,7 @@ export function SettingsPanel({
                 onClick={() => {
                   void saveKey(provider);
                 }}
-                className="rounded-lg bg-accent px-3 py-2 text-xs text-white"
+                className="ui-btn ui-btn-accent"
               >
                 Save key
               </button>
@@ -164,7 +175,7 @@ export function SettingsPanel({
                 onClick={() => {
                   void clearKey(provider);
                 }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                className="ui-btn ui-btn-ghost"
               >
                 Clear
               </button>
@@ -173,13 +184,16 @@ export function SettingsPanel({
                 onClick={() => {
                   void testConnection(provider);
                 }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                className="ui-btn ui-btn-ghost"
               >
                 Test
               </button>
             </div>
             {connectionStatuses[provider] ? (
-              <p className={`mt-2 text-[11px] ${connectionStatuses[provider]?.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <p
+                className="mt-2 text-[11px]"
+                style={{ color: connectionStatuses[provider]?.ok ? '#34d399' : '#fb7185' }}
+              >
                 {connectionStatuses[provider]?.ok ? 'Connected:' : 'Failed:'} {connectionStatuses[provider]?.message}
               </p>
             ) : null}

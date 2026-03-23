@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { PlaySquare } from 'lucide-react';
+
 import type { ChatPortResponse } from '../../types/chat';
 import type { GetYouTubeContextResponse, YouTubeContextData } from '../../types/youtube';
 
@@ -137,23 +139,29 @@ export function YouTubePanel({ onAskAboutVideo }: YouTubePanelProps) {
   }, [context]);
 
   if (isContextLoading) {
-    return <p className="p-4 text-xs text-slate-500">Detecting YouTube page context...</p>;
+    return <p className="p-4 text-xs ui-subtle">Detecting YouTube page context...</p>;
   }
 
   if (!context?.isYouTubePage) {
-    return <p className="p-4 text-xs text-slate-500">Open a YouTube video page to use this panel.</p>;
+    return (
+      <div className="ui-empty p-4">
+        <PlaySquare size={32} className="ui-muted" />
+        <p className="text-xs ui-subtle">Open a YouTube video page to use this panel.</p>
+      </div>
+    );
   }
 
   if (!context.hasTranscript) {
     return (
-      <div className="p-4">
-        <p className="text-sm text-slate-700">No transcript is available for this video.</p>
+      <div className="ui-empty p-4">
+        <PlaySquare size={32} className="ui-muted" />
+        <p className="text-sm" style={{ color: 'var(--text-primary)' }}>No transcript is available for this video.</p>
         <button
           type="button"
           onClick={() => {
             void loadContext();
           }}
-          className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+          className="ui-btn ui-btn-ghost"
         >
           Retry
         </button>
@@ -163,15 +171,17 @@ export function YouTubePanel({ onAskAboutVideo }: YouTubePanelProps) {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col p-4">
-      <h2 className="text-sm font-semibold text-slate-900">{context.title || 'YouTube video'}</h2>
-      <p className="mt-1 truncate text-xs text-slate-500">{context.url}</p>
+      <h2 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+        {context.title || 'YouTube video'}
+      </h2>
+      <p className="mt-1 truncate text-xs ui-subtle">{context.url}</p>
 
       <div className="mt-3 flex gap-2">
         <button
           type="button"
           onClick={summarize}
           disabled={isSummarizing}
-          className="rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+          className="ui-btn ui-btn-accent"
         >
           Summarize video
         </button>
@@ -179,17 +189,17 @@ export function YouTubePanel({ onAskAboutVideo }: YouTubePanelProps) {
           <button
             type="button"
             onClick={() => onAskAboutVideo(`Use this YouTube summary as context:\n\n${summary}`)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+            className="ui-btn ui-btn-ghost"
           >
             Ask about this video
           </button>
         ) : null}
       </div>
 
-      {error ? <p className="mt-3 text-xs text-rose-600">{error}</p> : null}
-      {isSummarizing ? <p className="mt-3 text-xs text-slate-500">Generating summary...</p> : null}
+      {error ? <p className="mt-3 text-xs" style={{ color: '#fb7185' }}>{error}</p> : null}
+      {isSummarizing ? <p className="mt-3 text-xs ui-subtle">Generating summary...</p> : null}
       {summary ? (
-        <article className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 whitespace-pre-wrap">
+        <article className="ui-card mt-3 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap p-4 text-sm">
           {summary}
         </article>
       ) : null}

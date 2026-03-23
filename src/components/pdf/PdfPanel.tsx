@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 
+import { FileText } from 'lucide-react';
+
 import { parsePdfFile } from '../../lib/extractors/pdf';
 import type { PdfParseProgress, PdfParseResult } from '../../types/pdf';
 
@@ -47,7 +49,7 @@ export function PdfPanel({ onAskAboutPdf }: PdfPanelProps) {
 
   return (
     <section className="flex min-h-0 flex-1 flex-col p-4">
-      <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white">
+      <label className="ui-btn ui-btn-accent inline-flex w-fit items-center gap-2">
         <span>Upload PDF</span>
         <input
           type="file"
@@ -65,17 +67,26 @@ export function PdfPanel({ onAskAboutPdf }: PdfPanelProps) {
       </label>
 
       {isParsing ? (
-        <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-slate-600">{progressText ?? 'Parsing PDF...'}</p>
+        <div className="ui-card mt-3 p-4">
+          <p className="text-xs ui-subtle">{progressText ?? 'Parsing PDF...'}</p>
         </div>
       ) : null}
 
-      {error ? <p className="mt-3 text-xs text-rose-600">{error}</p> : null}
+      {error ? <p className="mt-3 text-xs" style={{ color: '#fb7185' }}>{error}</p> : null}
+
+      {!parsedPdf && !isParsing ? (
+        <div className="ui-empty mt-3">
+          <FileText size={32} className="ui-muted" />
+          <p className="text-xs ui-subtle">Upload a PDF to parse it and chat with the extracted content.</p>
+        </div>
+      ) : null}
 
       {parsedPdf ? (
-        <div className="mt-3 flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-sm font-semibold text-slate-900">{parsedPdf.fileName}</p>
-          <p className="mt-1 text-xs text-slate-500">
+        <div className="ui-card mt-3 flex min-h-0 flex-1 flex-col p-4">
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {parsedPdf.fileName}
+          </p>
+          <p className="mt-1 text-xs ui-subtle">
             {parsedPdf.pageCount} pages · {parsedPdf.source} extraction
           </p>
 
@@ -86,12 +97,12 @@ export function PdfPanel({ onAskAboutPdf }: PdfPanelProps) {
                 `Use this PDF context for follow-up questions:\n\n${parsedPdf.text.slice(0, 12000)}`,
               )
             }
-            className="mt-3 w-fit rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+            className="ui-btn ui-btn-ghost mt-3 w-fit"
           >
             Ask about this PDF
           </button>
 
-          <article className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700 whitespace-pre-wrap">
+          <article className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-lg p-3 text-xs whitespace-pre-wrap" style={{ background: 'var(--bg-overlay)', color: 'var(--text-primary)' }}>
             {parsedPdf.text || 'No extractable text found in this PDF.'}
           </article>
         </div>

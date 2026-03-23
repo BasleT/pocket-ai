@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { FileText } from 'lucide-react';
+
 import type { ChatPortResponse } from '../../types/chat';
 import type { PageContentResult } from '../../types/page';
 
@@ -119,8 +121,9 @@ export function SummarizePanel({ pageContext, onAskFollowUp }: SummarizePanelPro
 
   if (!pageContext?.content) {
     return (
-      <div className="p-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500">
+      <div className="ui-empty p-4">
+        <FileText size={32} className="ui-muted" />
+        <div className="text-xs ui-subtle">
           No extractable page content yet. Open a standard web page and try again.
         </div>
       </div>
@@ -134,7 +137,7 @@ export function SummarizePanel({ pageContext, onAskFollowUp }: SummarizePanelPro
           type="button"
           onClick={runSummarize}
           disabled={isLoading}
-          className="rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+          className="ui-btn ui-btn-accent"
         >
           Summarize this page
         </button>
@@ -143,14 +146,14 @@ export function SummarizePanel({ pageContext, onAskFollowUp }: SummarizePanelPro
             <button
               type="button"
               onClick={copySummary}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+              className="ui-btn ui-btn-ghost"
             >
               {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Copy failed' : 'Copy'}
             </button>
             <button
               type="button"
               onClick={() => onAskFollowUp(summary)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+              className="ui-btn ui-btn-ghost"
             >
               Ask follow-up
             </button>
@@ -159,17 +162,17 @@ export function SummarizePanel({ pageContext, onAskFollowUp }: SummarizePanelPro
       </div>
 
       {isLoading ? (
-        <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-          <div className="h-3 w-2/3 animate-pulse rounded bg-slate-200" />
-          <div className="h-3 w-5/6 animate-pulse rounded bg-slate-200" />
-          <div className="h-3 w-1/2 animate-pulse rounded bg-slate-200" />
+        <div className="ui-card mt-3 space-y-2 p-4">
+          <div className="skeleton-line w-2/3" />
+          <div className="skeleton-line w-5/6" />
+          <div className="skeleton-line w-1/2" />
         </div>
       ) : null}
 
-      {error ? <p className="mt-3 text-xs text-rose-600">{error}</p> : null}
+      {error ? <p className="mt-3 text-xs" style={{ color: '#fb7185' }}>{error}</p> : null}
 
       {summary ? (
-        <article className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 whitespace-pre-wrap">
+        <article className="ui-card mt-3 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap p-4 text-sm">
           {summary}
         </article>
       ) : null}

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { ScanText } from 'lucide-react';
+
 import type { GetPageImagesResponse, OcrResult, OcrUpdatedMessage } from '../../types/ocr';
 
 type OcrPanelProps = {
@@ -47,22 +49,25 @@ export function OcrPanel({ onSendToChat }: OcrPanelProps) {
   return (
     <section className="flex min-h-0 flex-1 flex-col p-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">Select an image from this page to extract text.</p>
+        <p className="text-xs ui-subtle">Select an image from this page to extract text.</p>
         <button
           type="button"
           onClick={() => {
             void loadImages();
           }}
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
+          className="ui-btn ui-btn-ghost !px-2 !py-1"
         >
           Refresh
         </button>
       </div>
 
-      {isLoadingImages ? <p className="mt-3 text-xs text-slate-500">Loading images...</p> : null}
+      {isLoadingImages ? <p className="mt-3 text-xs ui-subtle">Loading images...</p> : null}
 
       {!isLoadingImages && images.length === 0 ? (
-        <p className="mt-3 text-xs text-slate-500">No images detected on the current page.</p>
+        <div className="ui-empty mt-3">
+          <ScanText size={32} className="ui-muted" />
+          <p className="text-xs ui-subtle">No images detected on the current page.</p>
+        </div>
       ) : null}
 
       {images.length > 0 ? (
@@ -74,10 +79,10 @@ export function OcrPanel({ onSendToChat }: OcrPanelProps) {
               onClick={() => {
                 void runOcr(imageUrl);
               }}
-              className="overflow-hidden rounded-lg border border-slate-200 bg-white text-left"
+              className="ui-card cursor-pointer overflow-hidden text-left transition-all duration-150 hover:scale-[1.01]"
             >
               <img src={imageUrl} alt="Page preview" className="h-20 w-full object-cover" />
-              <p className="truncate px-2 py-1 text-[10px] text-slate-500">
+              <p className="truncate px-2 py-1 text-[10px] ui-subtle">
                 {extractingImageUrl === imageUrl ? 'Extracting...' : imageUrl}
               </p>
             </button>
@@ -86,16 +91,16 @@ export function OcrPanel({ onSendToChat }: OcrPanelProps) {
       ) : null}
 
       {ocrResult ? (
-        <div className="mt-3 min-h-0 flex-1 rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs text-slate-500">Extracted text</p>
-          <article className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap text-xs text-slate-700">
+        <div className="ui-card mt-3 min-h-0 flex-1 p-3">
+          <p className="text-xs ui-subtle">Extracted text</p>
+          <article className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap text-xs" style={{ color: 'var(--text-primary)' }}>
             {ocrResult.error ? `Error: ${ocrResult.error}` : ocrResult.text || 'No text extracted.'}
           </article>
           {!ocrResult.error && ocrResult.text ? (
             <button
               type="button"
               onClick={() => onSendToChat(`Use this OCR text as context:\n\n${ocrResult.text}`)}
-              className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+              className="ui-btn ui-btn-ghost mt-3"
             >
               Send to chat
             </button>

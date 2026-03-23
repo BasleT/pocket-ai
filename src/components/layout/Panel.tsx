@@ -1,3 +1,5 @@
+import { Sparkles } from 'lucide-react';
+
 import { ChatPanel } from '../Chat/ChatPanel';
 import { OcrPanel } from '../ocr/OcrPanel';
 import { PdfPanel } from '../pdf/PdfPanel';
@@ -71,14 +73,17 @@ export function Panel({
   const content = PANEL_CONTENT[activePanel];
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-panel" aria-live="polite">
-      <header className="border-b border-slate-200 px-4 py-3">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Pocket AI</p>
-        <h1 className="mt-1 text-base font-semibold text-slate-900">{content.title}</h1>
-        <p className="mt-1 text-xs text-slate-500">{content.description}</p>
-        <p className="mt-2 truncate text-[11px] text-slate-400">Current page: {pageTitle}</p>
-        {pageWarning ? <p className="mt-1 text-[11px] text-amber-600">{pageWarning}</p> : null}
+    <section className="ui-panel" aria-live="polite">
+      <header className="ui-panel-header">
+        <p className="ui-brand">Pocket AI</p>
+        <p className="ui-page-title">{pageTitle}</p>
       </header>
+
+      {pageWarning ? (
+        <div className="px-4 py-2 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+          {pageWarning}
+        </div>
+      ) : null}
 
       <div key={activePanel} className="panel-animate min-h-0 flex-1">
         {activePanel === 'chat' ? (
@@ -87,6 +92,7 @@ export function Panel({
             sendRequest={chatSendRequest}
             onSendRequestHandled={onChatSendRequestHandled}
             modelId={selectedModelId}
+            onModelChange={onModelChange}
           />
         ) : activePanel === 'summarize' ? (
           <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
@@ -103,14 +109,11 @@ export function Panel({
             themeMode={themeMode}
             onThemeModeChange={onThemeModeChange}
           />
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-sm text-slate-700">{content.title} panel skeleton is ready.</p>
-              <p className="mt-2 text-xs text-slate-500">
-                This panel will be implemented in its dedicated phase.
-              </p>
-            </div>
+      ) : (
+          <div className="ui-empty">
+            <Sparkles size={32} className="ui-muted" />
+            <p className="text-sm">{content.title} panel is ready.</p>
+            <p className="text-xs ui-muted">{content.description}</p>
           </div>
         )}
       </div>

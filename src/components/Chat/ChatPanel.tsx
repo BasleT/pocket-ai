@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { MessageSquareDashed } from 'lucide-react';
+
 import { buildPageContextSystemPrompt } from '../../lib/ai';
+import { CHAT_MODELS } from '../../lib/ai';
 import type {
   ChatModelId,
   ChatPortResponse,
@@ -57,9 +60,16 @@ type ChatPanelProps = {
   sendRequest?: { id: string; text: string } | null;
   onSendRequestHandled?: (id: string) => void;
   modelId: ChatModelId;
+  onModelChange: (modelId: ChatModelId) => void;
 };
 
-export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled, modelId }: ChatPanelProps) {
+export function ChatPanel({
+  pageContext,
+  sendRequest,
+  onSendRequestHandled,
+  modelId,
+  onModelChange,
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -228,19 +238,28 @@ export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled, mode
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-slate-200 px-4 py-2">
-        <p className="text-xs text-slate-500">Chatting about: {pageContext?.title ?? 'current page'}</p>
+      <div className="px-4 py-3">
+        <p className="ui-subtle text-xs">Chatting about: {pageContext?.title ?? 'current page'}</p>
       </div>
 
       {messages.length === 0 ? (
-        <div className="px-4 pt-3">
+        <div className="px-4 pt-2">
+          <div className="mb-5 flex items-center justify-center">
+            <div className="ui-empty !min-h-0">
+              <MessageSquareDashed size={32} className="ui-muted" />
+              <p className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+                Hi, how can I help?
+              </p>
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {quickActions.map((action) => (
               <button
                 key={action}
                 type="button"
                 onClick={() => handleSend(action)}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-accent hover:text-accent"
+                className="ui-quick-chip"
               >
                 {action}
               </button>
@@ -250,13 +269,13 @@ export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled, mode
       ) : null}
 
       {chatError ? (
-        <div className="mx-3 mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+        <div className="ui-overlay mx-3 mt-3 text-xs" style={{ color: 'var(--text-primary)' }}>
           <p>{chatError}</p>
           {lastFailedPrompt ? (
             <button
               type="button"
               onClick={() => sendPrompt(lastFailedPrompt)}
-              className="mt-2 rounded-md border border-rose-300 px-2 py-1 text-xs"
+              className="ui-btn ui-btn-ghost mt-2"
             >
               Retry
             </button>
@@ -265,7 +284,13 @@ export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled, mode
       ) : null}
 
       <ChatWindow messages={messages} isStreaming={isStreaming} />
-      <ChatInput isSending={isStreaming} onSend={handleSend} />
+      <ChatInput
+        isSending={isStreaming}
+        onSend={handleSend}
+        modelId={modelId}
+        models={CHAT_MODELS}
+        onModelChange={onModelChange}
+      />
     </section>
   );
 }
