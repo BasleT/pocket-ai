@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChatWindow } from '../../src/components/Chat/ChatWindow';
 import { EmbedProvider } from '../../src/components/providers/EmbedProvider';
 import { EmbedProviderTab } from '../../src/components/providers/EmbedProviderTab';
+import { ContextBar } from '../../src/components/Toolbar/ContextBar';
 import { ModelPicker } from '../../src/components/Toolbar/ModelPicker';
 import {
   DEFAULT_PROVIDER_ID,
@@ -12,6 +13,7 @@ import {
 import { GROQ_MODELS } from '../../src/lib/ai';
 import { storageGet, storageSet } from '../../src/lib/storage';
 import type { GroqModelId } from '../../src/types/chat';
+import type { GetPageContentResponse, PageContentResult } from '../../src/types/page';
 
 type SidebarMode = 'embed' | 'ai';
 
@@ -28,6 +30,21 @@ const SELECTED_MODEL_KEY = 'aiSelectedModelId';
 
 const DEFAULT_MODEL_ID = GROQ_MODELS[0].id;
 
+function buildPageSummarizePrompt(page: PageContentResult): string {
+  const selectionBlock = page.selection
+    ? `\n\nSelected text:\n${page.selection}`
+    : '\n\nSelected text: (none)';
+
+  return [
+    'Summarize this page and highlight key points in concise bullet points.',
+    `Title: ${page.title}`,
+    `URL: ${page.url}`,
+    `Source: ${page.source}`,
+    `Content:\n${page.content}`,
+    selectionBlock,
+  ].join('\n\n');
+}
+
 function isGroqModelId(value: string): value is GroqModelId {
   return GROQ_MODELS.some((model) => model.id === value);
 }
@@ -41,6 +58,10 @@ function App() {
   const [openProviderIds, setOpenProviderIds] = useState<ProviderId[]>([DEFAULT_PROVIDER_ID]);
   const [mode, setMode] = useState<SidebarMode>('embed');
   const [selectedModelId, setSelectedModelId] = useState<GroqModelId>(DEFAULT_MODEL_ID);
+  const [pageContext, setPageContext] = useState<PageContentResult | null>(null);
+  const [pageContextError, setPageContextError] = useState<string | null>(null);
+  const [isContextLoading, setIsContextLoading] = useState(false);
+  const [quickPromptDraft, setQuickPromptDraft] = useState('');
   const [loadedFromSession, setLoadedFromSession] = useState(false);
 
   const openProviderIdSet = useMemo(() => new Set(openProviderIds), [openProviderIds]);
@@ -97,6 +118,46 @@ function App() {
     );
   };
 
+  const loadPageContext = async () => {
+    setIsContextLoading(true);
+    setPageContextError(null);
+
+    try {
+      const response = (await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT' })) as GetPageContentResponse;
+
+      if (!response?.ok) {
+        setPageContext(null);
+        setPageContextError(response?.message ?? 'Failed to load page context.');
+        return;
+      }
+
+      setPageContext(response.page);
+    } catch (error) {
+      setPageContext(null);
+      setPageContextError(error instanceof Error ? error.message : 'Failed to load page context.');
+    } finally {
+      setIsContextLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (mode !== 'ai') {
+      return;
+    }
+
+    void loadPageContext();
+  }, [mode]);
+
+  const contextSystemMessage = pageContext
+    ? [
+        'You are helping the user with the currently open page.',
+        `Page title: ${pageContext.title}`,
+        `Page URL: ${pageContext.url}`,
+        pageContext.selection ? `Selected text: ${pageContext.selection}` : 'Selected text: none',
+        `Page content:\n${pageContext.content}`,
+      ].join('\n\n')
+    : undefined;
+
   return (
     <main className="flex h-screen flex-col bg-slate-50 text-slate-900">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
@@ -142,10 +203,50 @@ function App() {
         </>
       ) : (
         <section className="flex min-h-0 flex-1 flex-col">
-          <div className="border-b border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
             <ModelPicker value={selectedModelId} onChange={setSelectedModelId} />
+            <button
+              type="button"
+              onClick={() => {
+                if (!pageContext) {
+                  return;
+                }
+
+                setQuickPromptDraft(buildPageSummarizePrompt(pageContext));
+              }}
+              disabled={!pageContext}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Summarize this page
+            </button>
           </div>
-          <ChatWindow modelId={selectedModelId} />
+
+          {pageContext ? (
+            <ContextBar
+              title={pageContext.title}
+              source={pageContext.source}
+              warning={pageContext.warning}
+            />
+          ) : null}
+
+          {isContextLoading ? (
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              Loading page context...
+            </div>
+          ) : null}
+
+          {pageContextError ? (
+            <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              {pageContextError}
+            </div>
+          ) : null}
+
+          <ChatWindow
+            modelId={selectedModelId}
+            contextSystemMessage={contextSystemMessage}
+            draftText={quickPromptDraft}
+            onDraftTextChange={setQuickPromptDraft}
+          />
         </section>
       )}
     </main>

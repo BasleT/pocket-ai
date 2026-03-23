@@ -1,6 +1,7 @@
 import { registerEmbedRules } from '../src/lib/declarativeRules';
 import { streamChat } from '../src/lib/ai';
 import type { ChatPortResponse, ChatStreamStartMessage, SerializableModelMessage } from '../src/types/chat';
+import type { GetPageContentMessage, GetPageContentResponse } from '../src/types/page';
 
 async function syncEmbedRules(): Promise<void> {
   try {
@@ -95,6 +96,41 @@ async function handleChatStream(port: chrome.runtime.Port, message: ChatStreamSt
   }
 }
 
+async function getActiveTabId(): Promise<number | undefined> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab?.id;
+}
+
+async function handleGetPageContentRequest(): Promise<GetPageContentResponse> {
+  const tabId = await getActiveTabId();
+  if (!tabId) {
+    return { ok: false, message: 'No active tab found.' };
+  }
+
+  try {
+    const response = await chrome.tabs.sendMessage<GetPageContentMessage, GetPageContentResponse>(tabId, {
+      type: 'GET_PAGE_CONTENT',
+    });
+
+    if (!response) {
+      return {
+        ok: false,
+        message: 'No response from content script. Try refreshing the page.',
+      };
+    }
+
+    return response;
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Unable to read page content from the active tab.',
+    };
+  }
+}
+
 export default defineBackground(() => {
   void syncEmbedRules();
 
@@ -136,11 +172,21 @@ export default defineBackground(() => {
     });
   });
 
-  chrome.runtime.onMessage.addListener((message) => {
-    if (!message || message.type !== 'KEEP_ALIVE') {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (!message) {
       return;
     }
 
-    return true;
+    if (message.type === 'KEEP_ALIVE') {
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (message.type === 'GET_PAGE_CONTENT') {
+      void handleGetPageContentRequest().then((response) => sendResponse(response));
+      return true;
+    }
+
+    return;
   });
 });

@@ -24,13 +24,33 @@ const toSerializableMessages = (messages: LocalChatMessage[]): SerializableModel
 
 type ChatWindowProps = {
   modelId: GroqModelId;
+  contextSystemMessage?: string;
+  draftText?: string;
+  onDraftTextChange?: (value: string) => void;
 };
 
 type RetryContext = {
   conversationMessages: LocalChatMessage[];
 };
 
-export function ChatWindow({ modelId }: ChatWindowProps) {
+function buildStreamMessages(
+  conversationMessages: LocalChatMessage[],
+  contextSystemMessage?: string,
+): SerializableModelMessage[] {
+  const base = toSerializableMessages(conversationMessages);
+  if (!contextSystemMessage) {
+    return base;
+  }
+
+  return [{ role: 'system', content: contextSystemMessage }, ...base];
+}
+
+export function ChatWindow({
+  modelId,
+  contextSystemMessage,
+  draftText,
+  onDraftTextChange,
+}: ChatWindowProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -92,7 +112,7 @@ export function ChatWindow({ modelId }: ChatWindowProps) {
       type: 'CHAT_STREAM_START',
       requestId,
       modelId,
-      messages: toSerializableMessages(conversationMessages),
+      messages: buildStreamMessages(conversationMessages, contextSystemMessage),
     };
 
     const port = chrome.runtime.connect({ name: 'ai-stream' });
@@ -197,7 +217,12 @@ export function ChatWindow({ modelId }: ChatWindowProps) {
         </div>
       ) : null}
 
-      <ChatInput isDisabled={isStreaming} onSend={handleSend} />
+      <ChatInput
+        isDisabled={isStreaming}
+        value={draftText}
+        onChange={onDraftTextChange}
+        onSend={handleSend}
+      />
     </section>
   );
 }

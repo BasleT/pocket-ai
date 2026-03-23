@@ -2,14 +2,28 @@ import { useState } from 'react';
 
 type ChatInputProps = {
   isDisabled?: boolean;
+  value?: string;
+  onChange?: (value: string) => void;
   onSend: (text: string) => void;
 };
 
-export function ChatInput({ isDisabled = false, onSend }: ChatInputProps) {
-  const [value, setValue] = useState('');
+export function ChatInput({ isDisabled = false, value, onChange, onSend }: ChatInputProps) {
+  const [internalValue, setInternalValue] = useState('');
+
+  const isControlled = typeof value === 'string';
+  const currentValue = isControlled ? value : internalValue;
+
+  const setValue = (nextValue: string) => {
+    if (isControlled) {
+      onChange?.(nextValue);
+      return;
+    }
+
+    setInternalValue(nextValue);
+  };
 
   const submit = () => {
-    const trimmed = value.trim();
+    const trimmed = currentValue.trim();
     if (!trimmed || isDisabled) {
       return;
     }
@@ -21,7 +35,7 @@ export function ChatInput({ isDisabled = false, onSend }: ChatInputProps) {
   return (
     <div className="border-t border-slate-200 bg-white p-3">
       <textarea
-        value={value}
+        value={currentValue}
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && event.ctrlKey) {
@@ -37,7 +51,7 @@ export function ChatInput({ isDisabled = false, onSend }: ChatInputProps) {
         <button
           type="button"
           onClick={submit}
-          disabled={isDisabled || value.trim().length === 0}
+          disabled={isDisabled || currentValue.trim().length === 0}
           className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           Send
