@@ -1,7 +1,9 @@
 import { IconRail } from './IconRail';
 import { Panel } from './Panel';
 import type { ActivePanel, RailItem } from './types';
+import type { ChatModelId } from '../../types/chat';
 import type { PageContentResult } from '../../types/page';
+import type { ThemeMode } from '../../types/settings';
 
 const RAIL_ITEMS: RailItem[] = [
   { id: 'chat', icon: '💬', label: 'Chat' },
@@ -21,6 +23,10 @@ type ShellProps = {
   chatSendRequest?: { id: string; text: string } | null;
   onChatSendRequestHandled?: (id: string) => void;
   onAskFollowUp: (summary: string) => void;
+  selectedModelId: ChatModelId;
+  onModelChange: (modelId: ChatModelId) => void;
+  themeMode: ThemeMode;
+  onThemeModeChange: (theme: ThemeMode) => void;
 };
 
 export function Shell({
@@ -32,6 +38,10 @@ export function Shell({
   chatSendRequest,
   onChatSendRequestHandled,
   onAskFollowUp,
+  selectedModelId,
+  onModelChange,
+  themeMode,
+  onThemeModeChange,
 }: ShellProps) {
   return (
     <main className="flex h-screen w-full overflow-hidden bg-white text-text">
@@ -43,6 +53,10 @@ export function Shell({
         chatSendRequest={chatSendRequest}
         onChatSendRequestHandled={onChatSendRequestHandled}
         onAskFollowUp={onAskFollowUp}
+        selectedModelId={selectedModelId}
+        onModelChange={onModelChange}
+        themeMode={themeMode}
+        onThemeModeChange={onThemeModeChange}
       />
       <IconRail activePanel={activePanel} items={RAIL_ITEMS} onSelect={onSelectPanel} />
     </main>

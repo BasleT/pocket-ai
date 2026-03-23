@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { buildPageContextSystemPrompt } from '../../lib/ai';
 import type {
+  ChatModelId,
   ChatPortResponse,
   ChatStreamChunkMessage,
   ChatStreamDoneMessage,
@@ -15,7 +16,6 @@ import { ChatWindow } from './ChatWindow';
 
 const CHAT_STORAGE_PREFIX = 'chat:tab:';
 const STREAM_PORT_NAME = 'ai-stream';
-const MODEL_ID = 'llama-3.3-70b-versatile';
 
 type StoredChatState = {
   messages: LocalChatMessage[];
@@ -56,9 +56,10 @@ type ChatPanelProps = {
   pageContext: PageContentResult | null;
   sendRequest?: { id: string; text: string } | null;
   onSendRequestHandled?: (id: string) => void;
+  modelId: ChatModelId;
 };
 
-export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled }: ChatPanelProps) {
+export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled, modelId }: ChatPanelProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -206,7 +207,7 @@ export function ChatPanel({ pageContext, sendRequest, onSendRequestHandled }: Ch
     port.postMessage({
       type: 'CHAT_STREAM_START',
       requestId,
-      modelId: MODEL_ID,
+      modelId,
       messages: serializable,
     });
   };

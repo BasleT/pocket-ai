@@ -1,10 +1,13 @@
 import { ChatPanel } from '../Chat/ChatPanel';
 import { OcrPanel } from '../ocr/OcrPanel';
 import { PdfPanel } from '../pdf/PdfPanel';
+import { SettingsPanel } from '../Settings/SettingsPanel';
 import { SummarizePanel } from '../summarize/SummarizePanel';
 import { YouTubePanel } from '../youtube/YouTubePanel';
 import type { ActivePanel } from './types';
+import type { ChatModelId } from '../../types/chat';
 import type { PageContentResult } from '../../types/page';
+import type { ThemeMode } from '../../types/settings';
 
 type PanelContent = {
   title: string;
@@ -46,6 +49,10 @@ type PanelProps = {
   chatSendRequest?: { id: string; text: string } | null;
   onChatSendRequestHandled?: (id: string) => void;
   onAskFollowUp: (summary: string) => void;
+  selectedModelId: ChatModelId;
+  onModelChange: (modelId: ChatModelId) => void;
+  themeMode: ThemeMode;
+  onThemeModeChange: (theme: ThemeMode) => void;
 };
 
 export function Panel({
@@ -56,6 +63,10 @@ export function Panel({
   chatSendRequest,
   onChatSendRequestHandled,
   onAskFollowUp,
+  selectedModelId,
+  onModelChange,
+  themeMode,
+  onThemeModeChange,
 }: PanelProps) {
   const content = PANEL_CONTENT[activePanel];
 
@@ -74,6 +85,7 @@ export function Panel({
           pageContext={pageContext}
           sendRequest={chatSendRequest}
           onSendRequestHandled={onChatSendRequestHandled}
+          modelId={selectedModelId}
         />
       ) : activePanel === 'summarize' ? (
         <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
@@ -83,6 +95,13 @@ export function Panel({
         <PdfPanel onAskAboutPdf={onAskFollowUp} />
       ) : activePanel === 'ocr' ? (
         <OcrPanel onSendToChat={onAskFollowUp} />
+      ) : activePanel === 'settings' ? (
+        <SettingsPanel
+          selectedModelId={selectedModelId}
+          onModelChange={onModelChange}
+          themeMode={themeMode}
+          onThemeModeChange={onThemeModeChange}
+        />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4">
