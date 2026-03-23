@@ -6,6 +6,10 @@ export function createPageContextStorageKey(tabId: number): string {
   return `pageContext:${tabId}`;
 }
 
+export function createPreviousPageContextStorageKey(tabId: number): string {
+  return `pageContext:${tabId}:previous`;
+}
+
 export function shouldExtractPageFromUrl(url: string): boolean {
   try {
     const parsed = new URL(url);

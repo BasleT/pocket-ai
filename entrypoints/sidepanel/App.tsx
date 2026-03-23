@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Shell } from '../../src/components/layout/Shell';
 import type { ActivePanel } from '../../src/components/layout/types';
@@ -11,8 +11,9 @@ import type { ThemeMode } from '../../src/types/settings';
 
 const MODEL_STORAGE_KEY = 'settings.modelId';
 const THEME_STORAGE_KEY = 'settings.themeMode';
-const CARRY_CONTEXT_STORAGE_KEY = 'settings.carryContext';
+const CARRY_CONTEXT_STORAGE_KEY = 'carryContext';
 const PENDING_SELECTION_PROMPT_PREFIX = 'chat:pendingSelectionPrompt:';
+const GLOBAL_PENDING_SELECTION_PROMPT_KEY = 'chat:pendingSelectionPrompt';
 
 const DEFAULT_MODEL_ID: ChatModelId = CHAT_MODELS[0].id;
 
@@ -32,8 +33,7 @@ function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
   const [carryContext, setCarryContext] = useState(false);
   const [previousPageContext, setPreviousPageContext] = useState<PageContentResult | null>(null);
-  const lastPageContextRef = useRef<PageContentResult | null>(null);
-  const { page, loading, error } = usePageContext();
+  const { page, previousPage, loading, error } = usePageContext();
 
   const pageTitle = loading
     ? 'Loading page context...'
@@ -68,17 +68,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!page?.url || !page.content) {
-      return;
-    }
-
-    const lastPage = lastPageContextRef.current;
-    if (lastPage && lastPage.url !== page.url) {
-      setPreviousPageContext(lastPage);
-    }
-
-    lastPageContextRef.current = page;
-  }, [page]);
+    setPreviousPageContext(previousPage ?? null);
+  }, [previousPage]);
 
   useEffect(() => {
     const onRuntimeMessage = (message: unknown) => {
@@ -86,15 +77,18 @@ function App() {
         !message ||
         typeof message !== 'object' ||
         !('type' in message) ||
-        (message as { type?: string }).type !== 'SELECTION_ACTION_CHAT'
+        (message as { type?: string }).type !== 'SELECTION_ACTION'
       ) {
         return;
       }
 
-      const prompt = (message as { prompt?: string }).prompt;
-      if (!prompt || typeof prompt !== 'string') {
+      const action = (message as { action?: string }).action;
+      const text = (message as { text?: string }).text;
+      if (!action || !text || typeof action !== 'string' || typeof text !== 'string') {
         return;
       }
+
+      const prompt = `${action} this: ${text}`;
 
       setActivePanel('chat');
       setChatSendRequest({
@@ -112,20 +106,24 @@ function App() {
   useEffect(() => {
     const consumePendingSelectionPrompt = async () => {
       const activeTabId = await getActiveTabId();
-      if (!activeTabId) {
+      const keys = [GLOBAL_PENDING_SELECTION_PROMPT_KEY];
+      if (activeTabId) {
+        keys.unshift(createPendingSelectionPromptKey(activeTabId));
+      }
+
+      const stored = await chrome.storage.session.get(keys);
+      const pending =
+        (activeTabId
+          ? (stored[createPendingSelectionPromptKey(activeTabId)] as { action: string; text: string } | undefined)
+          : undefined) ??
+        (stored[GLOBAL_PENDING_SELECTION_PROMPT_KEY] as { action: string; text: string } | undefined);
+      if (!pending) {
         return;
       }
 
-      const key = createPendingSelectionPromptKey(activeTabId);
-      const stored = await chrome.storage.session.get(key);
-      const prompt = stored[key] as string | undefined;
-      if (!prompt) {
-        return;
-      }
-
-      await chrome.storage.session.remove(key);
+      await chrome.storage.session.remove(keys);
       setActivePanel('chat');
-      setChatSendRequest({ id: crypto.randomUUID(), text: prompt });
+      setChatSendRequest({ id: crypto.randomUUID(), text: `${pending.action} this: ${pending.text}` });
     };
 
     void consumePendingSelectionPrompt();

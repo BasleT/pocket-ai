@@ -33,6 +33,11 @@ describe('resolveOcrInput', () => {
     expect(resolveOcrInput('https://example.com/image.png')).toBe('https://example.com/image.png');
   });
 
+  it('accepts base64 screenshot data urls', () => {
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+    expect(resolveOcrInput(dataUrl)).toBe(dataUrl);
+  });
+
   it('rejects unsupported url protocols', () => {
     expect(() => resolveOcrInput('file:///tmp/a.png')).toThrow('Unsupported image URL protocol');
   });

@@ -4,7 +4,7 @@ export type PageContentResult = {
   content: string;
   excerpt?: string;
   selection?: string;
-  source: 'readability' | 'dom' | 'body' | 'unsupported' | 'fallback';
+  source: 'readability' | 'dom' | 'body' | 'ocr' | 'unsupported' | 'fallback';
   warning?: string;
 };
 
@@ -25,6 +25,7 @@ export type PageContentUpdatedMessage = {
   type: 'PAGE_CONTENT_UPDATED';
   tabId: number;
   page: PageContentResult;
+  previousPage?: PageContentResult;
 };
 
 export type GetPageContentResponse =

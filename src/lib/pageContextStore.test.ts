@@ -4,12 +4,17 @@ import {
   ACTIVE_PAGE_TAB_ID_KEY,
   buildFallbackPageContext,
   createPageContextStorageKey,
+  createPreviousPageContextStorageKey,
   shouldExtractPageFromUrl,
 } from './pageContextStore';
 
 describe('pageContextStore helpers', () => {
   it('creates deterministic storage key per tab', () => {
     expect(createPageContextStorageKey(42)).toBe('pageContext:42');
+  });
+
+  it('creates deterministic previous-page key per tab', () => {
+    expect(createPreviousPageContextStorageKey(42)).toBe('pageContext:42:previous');
   });
 
   it('provides a stable active-tab storage key', () => {

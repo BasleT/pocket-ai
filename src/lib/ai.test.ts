@@ -89,9 +89,9 @@ describe('buildPageContextSystemPrompt', () => {
       },
     );
 
-    expect(prompt).toContain('Previous page context');
-    expect(prompt).toContain('Previous Page');
-    expect(prompt).toContain('https://example.com/previous');
+    expect(prompt).toContain('Previously reading: Previous Page');
+    expect(prompt).toContain('Currently reading: Current Page');
+    expect(prompt).toContain('---');
   });
 });
 

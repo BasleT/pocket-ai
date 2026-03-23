@@ -6,6 +6,7 @@ import {
   ACTIVE_PAGE_TAB_ID_KEY,
   buildFallbackPageContext,
   createPageContextStorageKey,
+  createPreviousPageContextStorageKey,
   shouldExtractPageFromUrl,
 } from '../src/lib/pageContextStore';
 import { storageGetSecret } from '../src/lib/storage';
@@ -31,13 +32,14 @@ import {
 import { API_KEY_FIELD_MAP } from '../src/types/settings';
 
 const PENDING_SELECTION_PROMPT_PREFIX = 'chat:pendingSelectionPrompt:';
+const GLOBAL_PENDING_SELECTION_PROMPT_KEY = 'chat:pendingSelectionPrompt';
 
 function createPendingSelectionPromptKey(tabId: number): string {
   return `${PENDING_SELECTION_PROMPT_PREFIX}${tabId}`;
 }
 
 function extractPagePayloadInPage(selectionText: string) {
-  const maxExtractChars = 15_000;
+  const maxExtractChars = 20_000;
 
   const truncate = (value: string, max = maxExtractChars): string => {
     if (value.length <= max) {
@@ -52,7 +54,7 @@ function extractPagePayloadInPage(selectionText: string) {
   const title = normalize(document.title) || 'Untitled page';
   const selection = normalize(selectionText);
   console.log('[pocket-ai] extracting:', title);
-  console.log('[pocket-ai] body length:', (document.body?.innerText ?? '').length);
+  console.log('[pocket-ai] body length:', (document.body?.textContent ?? '').length);
 
   try {
     console.log('[pocket-ai] extraction step 1 readability begin', { url });
@@ -98,7 +100,7 @@ function extractPagePayloadInPage(selectionText: string) {
 
   for (const selector of selectors) {
     const element = document.querySelector(selector);
-    const text = normalize(element instanceof HTMLElement ? element.innerText : '');
+    const text = normalize(element?.textContent);
 
     if (text.length > 200) {
       console.log('[pocket-ai] extraction step 2 dom fallback success', {
@@ -122,9 +124,8 @@ function extractPagePayloadInPage(selectionText: string) {
   }
 
   console.log('[pocket-ai] extraction step 3 body fallback begin', { url });
-  const bodyText = normalize(document.body?.innerText ?? '');
-  const rootText = normalize((document.documentElement as HTMLElement | null)?.innerText ?? '');
-  const lastResortText = rootText || bodyText;
+  const bodyText = normalize(document.body?.textContent ?? '');
+  const lastResortText = bodyText;
   if (lastResortText.length > 100) {
     console.log('[pocket-ai] extraction step 3 body fallback success', {
       url,
@@ -265,8 +266,20 @@ async function storePageContentForTab(tabId: number, page: PageContentMessage['p
     source: page.source,
   });
 
+  const currentKey = createPageContextStorageKey(tabId);
+  const previousKey = createPreviousPageContextStorageKey(tabId);
+  const existing = await chrome.storage.session.get([currentKey, previousKey]);
+  const currentStored = existing[currentKey] as PageContentMessage['payload'] | undefined;
+  const previousStored = existing[previousKey] as PageContentMessage['payload'] | undefined;
+
+  let nextPrevious = previousStored;
+  if (currentStored && currentStored.url !== page.url) {
+    nextPrevious = currentStored;
+  }
+
   await chrome.storage.session.set({
-    [createPageContextStorageKey(tabId)]: page,
+    [currentKey]: page,
+    [previousKey]: nextPrevious,
     [ACTIVE_PAGE_TAB_ID_KEY]: tabId,
   });
 
@@ -274,6 +287,7 @@ async function storePageContentForTab(tabId: number, page: PageContentMessage['p
     type: 'PAGE_CONTENT_UPDATED',
     tabId,
     page,
+    previousPage: nextPrevious,
   });
 }
 
@@ -290,6 +304,46 @@ async function requestTabContextRefresh(tabId: number): Promise<void> {
     });
   } catch {
     // Ignore tabs where content script is unavailable.
+  }
+}
+
+async function runScreenshotOcrFallback(tabId: number, tab: chrome.tabs.Tab): Promise<PageContentMessage['payload'] | null> {
+  if (!tab.windowId) {
+    return null;
+  }
+
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+    if (!dataUrl) {
+      return null;
+    }
+
+    const ocrResponse = await chrome.tabs.sendMessage(tabId, {
+      type: 'RUN_SCREENSHOT_OCR',
+      imageDataUrl: dataUrl,
+    }) as { ok: boolean; text?: string; message?: string };
+
+    const text = typeof ocrResponse?.text === 'string' ? ocrResponse.text.trim() : '';
+    if (!ocrResponse?.ok || text.length < 100) {
+      console.debug('[pocket-ai] screenshot OCR produced insufficient text', {
+        tabId,
+        ok: ocrResponse?.ok,
+        length: text.length,
+        message: ocrResponse?.message,
+      });
+      return null;
+    }
+
+    return {
+      title: tab.title || 'Untitled page',
+      url: tab.url || '',
+      content: text.slice(0, 20_000),
+      source: 'ocr',
+      warning: 'Note: content extracted via OCR screenshot',
+    };
+  } catch (error) {
+    console.error('[pocket-ai] screenshot OCR fallback failed', { tabId, error });
+    return null;
   }
 }
 
@@ -340,6 +394,17 @@ async function extractPageContentForTab(tabId: number, selectionText = '', reaso
     if (!safePayload.content && safePayload.source !== 'unsupported') {
       safePayload.source = 'unsupported';
       safePayload.warning = 'Extraction returned empty content.';
+    }
+
+    if (safePayload.content.length < 100) {
+      const activeTabId = await getActiveTabId();
+      if (activeTabId === tabId) {
+        const ocrFallback = await runScreenshotOcrFallback(tabId, tab);
+        if (ocrFallback) {
+          await storePageContentForTab(tabId, ocrFallback);
+          return;
+        }
+      }
     }
 
     console.debug('[pocket-ai] extraction complete', {
@@ -797,7 +862,11 @@ export default defineBackground(() => {
       return true;
     }
 
-    if (message.type === 'SELECTION_TOOLBAR_ACTION' && typeof message.prompt === 'string') {
+    if (
+      message.type === 'SELECTION_ACTION' &&
+      typeof message.action === 'string' &&
+      typeof message.text === 'string'
+    ) {
       const tabId = _sender.tab?.id;
       if (!tabId) {
         sendResponse({ ok: false });
@@ -805,11 +874,14 @@ export default defineBackground(() => {
       }
 
       void chrome.storage.session
-        .set({ [createPendingSelectionPromptKey(tabId)]: message.prompt })
+        .set({
+          [createPendingSelectionPromptKey(tabId)]: { action: message.action, text: message.text },
+          [GLOBAL_PENDING_SELECTION_PROMPT_KEY]: { action: message.action, text: message.text },
+        })
         .then(() => chrome.sidePanel.open({ tabId }))
         .then(() => {
         openSidePanelTabs.add(tabId);
-        void chrome.runtime.sendMessage({ type: 'SELECTION_ACTION_CHAT', prompt: message.prompt });
+        void chrome.runtime.sendMessage({ type: 'SELECTION_ACTION', action: message.action, text: message.text });
         sendResponse({ ok: true });
         })
         .catch(() => {

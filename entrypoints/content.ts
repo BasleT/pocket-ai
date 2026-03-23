@@ -1,4 +1,5 @@
 import { Readability } from '@mozilla/readability';
+import { recognizeImageText } from '../src/lib/extractors/ocr';
 import type {
   GetPageContentMessage,
   GetPageContentResponse,
@@ -51,6 +52,8 @@ export default defineContentScript({
 
     let latestSelection = '';
     let selectionToolbar: HTMLDivElement | null = null;
+    let lastObservedScrollHeight = document.documentElement.scrollHeight;
+    let suppressToolbarUntil = 0;
 
     const removeToolbar = () => {
       if (!selectionToolbar) {
@@ -63,6 +66,20 @@ export default defineContentScript({
 
     const createActionPrompt = (action: 'Explain' | 'Summarize' | 'Translate' | 'Improve', text: string): string =>
       `${action} this: ${text}`;
+
+    const debounce = <T extends (...args: never[]) => void>(fn: T, waitMs: number) => {
+      let timeoutId: number | null = null;
+
+      return (...args: Parameters<T>) => {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+
+        timeoutId = window.setTimeout(() => {
+          fn(...args);
+        }, waitMs);
+      };
+    };
 
     const showToolbar = (rect: DOMRect, text: string) => {
       removeToolbar();
@@ -112,11 +129,18 @@ export default defineContentScript({
           button.style.background = 'transparent';
         });
 
-        button.addEventListener('click', () => {
+        const triggerSelectionAction = (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
           const prompt = createActionPrompt(action, text);
-          void chrome.runtime.sendMessage({ type: 'SELECTION_TOOLBAR_ACTION', prompt });
+          console.log('[pocket-ai] toolbar click:', action, text.slice(0, 60));
+          void chrome.runtime.sendMessage({ type: 'SELECTION_ACTION', action, text });
+          suppressToolbarUntil = Date.now() + 1000;
           removeToolbar();
-        });
+        };
+
+        button.addEventListener('mousedown', triggerSelectionAction);
+        button.addEventListener('click', triggerSelectionAction);
 
         toolbar.appendChild(button);
       }
@@ -132,7 +156,7 @@ export default defineContentScript({
 
     const requestBackgroundSnapshot = (reason: string) => {
       console.log('[pocket-ai] extracting:', document.title);
-      console.log('[pocket-ai] body length:', document.body?.innerText.length ?? 0);
+      console.log('[pocket-ai] body length:', document.body?.textContent?.length ?? 0);
 
       void chrome.runtime.sendMessage({
         type: 'REQUEST_BACKGROUND_PAGE_SNAPSHOT',
@@ -147,10 +171,55 @@ export default defineContentScript({
       });
     };
 
+    const checkLazyLoadedGrowth = debounce(() => {
+      const currentScrollHeight = document.documentElement.scrollHeight;
+      if (currentScrollHeight > lastObservedScrollHeight + 200) {
+        lastObservedScrollHeight = currentScrollHeight;
+        requestBackgroundSnapshot('scroll-growth');
+      }
+    }, 700);
+
+    const scheduleAfterInitialExtraction = () => {
+      const initialHeight = document.documentElement.scrollHeight;
+      window.setTimeout(() => {
+        const nextHeight = document.documentElement.scrollHeight;
+        if (nextHeight > initialHeight + 200) {
+          lastObservedScrollHeight = nextHeight;
+          requestBackgroundSnapshot('post-initial-growth');
+        }
+      }, 1500);
+    };
+
+    const observeDynamicDomUpdates = () => {
+      const debouncedMutationExtraction = debounce((mutations: MutationRecord[]) => {
+        let addedNodes = 0;
+        for (const mutation of mutations) {
+          addedNodes += mutation.addedNodes.length;
+        }
+
+        if (addedNodes >= 10) {
+          requestBackgroundSnapshot('mutation-observer');
+        }
+      }, 1000);
+
+      const observer = new MutationObserver((mutations) => {
+        debouncedMutationExtraction(mutations);
+      });
+
+      if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    };
+
     const updateSelection = () => {
       const selection = window.getSelection();
       const text = selection?.toString().trim() ?? '';
       latestSelection = text;
+
+      if (Date.now() < suppressToolbarUntil) {
+        removeToolbar();
+        return;
+      }
 
       if (!text || text.length < 10 || !selection || selection.rangeCount === 0) {
         removeToolbar();
@@ -175,6 +244,7 @@ export default defineContentScript({
     window.addEventListener('mouseup', updateSelection);
     window.addEventListener('keyup', updateSelection);
     window.addEventListener('scroll', removeToolbar, true);
+    window.addEventListener('scroll', checkLazyLoadedGrowth, true);
     document.addEventListener('mousedown', (event) => {
       const target = event.target as Node | null;
       if (selectionToolbar && target && selectionToolbar.contains(target)) {
@@ -202,6 +272,8 @@ export default defineContentScript({
     window.addEventListener('DOMContentLoaded', () => requestBackgroundSnapshot('domcontentloaded'));
 
     window.setTimeout(() => requestBackgroundSnapshot('initial-timeout'), 0);
+    scheduleAfterInitialExtraction();
+    observeDynamicDomUpdates();
 
     chrome.runtime.onMessage.addListener(
       (
@@ -209,7 +281,8 @@ export default defineContentScript({
           | GetPageContentMessage
           | GetYouTubeVideoInfoMessage
           | RequestPageContentSnapshotMessage
-          | GetPageImagesMessage,
+          | GetPageImagesMessage
+          | { type: 'RUN_SCREENSHOT_OCR'; imageDataUrl?: string },
         _sender,
         sendResponse,
       ) => {
@@ -244,6 +317,25 @@ export default defineContentScript({
           const response: GetPageImagesResponse = { ok: true, images: uniqueImages };
           sendResponse(response);
           return false;
+        }
+
+        if (rawMessage.type === 'RUN_SCREENSHOT_OCR') {
+          const imageDataUrl = typeof rawMessage.imageDataUrl === 'string' ? rawMessage.imageDataUrl : '';
+          if (!imageDataUrl) {
+            sendResponse({ ok: false, message: 'Missing screenshot payload.' });
+            return false;
+          }
+
+          void recognizeImageText(imageDataUrl)
+            .then((text) => sendResponse({ ok: true, text }))
+            .catch((error) =>
+              sendResponse({
+                ok: false,
+                message: error instanceof Error ? error.message : 'Screenshot OCR failed.',
+              })
+            );
+
+          return true;
         }
 
         if (rawMessage.type !== 'GET_PAGE_CONTENT') {

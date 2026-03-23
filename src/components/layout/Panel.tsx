@@ -93,6 +93,12 @@ export function Panel({
               <span>{contentTypeMeta.label}</span>
             </span>
           ) : null}
+          {pageContext?.source === 'ocr' ? (
+            <span className="ui-content-badge badge-animate" title="Content extracted from screenshot OCR">
+              <span aria-hidden="true">📷</span>
+              <span>OCR</span>
+            </span>
+          ) : null}
         </div>
       </header>
 

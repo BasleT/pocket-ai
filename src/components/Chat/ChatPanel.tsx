@@ -89,6 +89,19 @@ export function ChatPanel({
     [],
   );
 
+  const triggerPageReread = async () => {
+    const tabId = await getActiveTabId();
+    if (!tabId) {
+      return;
+    }
+
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: 'REQUEST_PAGE_CONTENT_SNAPSHOT' });
+    } catch {
+      // Ignore if content script is not reachable.
+    }
+  };
+
   useEffect(() => {
     const port = chrome.runtime.connect({ name: STREAM_PORT_NAME });
     streamPortRef.current = port;
@@ -283,12 +296,19 @@ export function ChatPanel({
   return (
     <section className="flex min-h-0 flex-1 flex-col">
       <div className="px-4 py-3 flex items-center gap-2">
-        <p className="ui-subtle text-xs">Chatting about: {pageContext?.title ?? 'current page'}</p>
+        <p className="ui-subtle text-xs">
+          {carryContext && previousPageContext
+            ? `🗒️ ${pageContext?.title ?? 'current page'} + ${previousPageContext.title}`
+            : `Chatting about: ${pageContext?.title ?? 'current page'}`}
+        </p>
         {carryContext && previousPageContext ? (
           <span className="ui-context-pill" title="Including previous tab context">
-            📎 +1 previous page
+            📎 Carrying context from: {previousPageContext.title}
           </span>
         ) : null}
+        <button type="button" className="ui-btn ui-btn-ghost ml-auto !py-1" onClick={() => void triggerPageReread()}>
+          Re-read page
+        </button>
       </div>
 
       {showPageChangeToast ? <div className="ui-page-toast mx-4">✨ New page</div> : null}

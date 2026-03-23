@@ -4,11 +4,13 @@ import {
   ACTIVE_PAGE_TAB_ID_KEY,
   buildFallbackPageContext,
   createPageContextStorageKey,
+  createPreviousPageContextStorageKey,
 } from './pageContextStore';
 import type { PageContentResult, PageContentUpdatedMessage } from '../types/page';
 
 type UsePageContextState = {
   page: PageContentResult | null;
+  previousPage: PageContentResult | null;
   loading: boolean;
   error: string | null;
 };
@@ -18,26 +20,38 @@ async function getActiveTabId(): Promise<number | null> {
   return tab?.id ?? null;
 }
 
-async function loadStoredPageContext(): Promise<PageContentResult> {
+async function loadStoredPageContext(): Promise<{ page: PageContentResult; previousPage: PageContentResult | null }> {
   const activeTabId = await getActiveTabId();
   if (!activeTabId) {
-    return buildFallbackPageContext('');
+    return {
+      page: buildFallbackPageContext(''),
+      previousPage: null,
+    };
   }
 
   const storageKey = createPageContextStorageKey(activeTabId);
-  const stored = await chrome.storage.session.get([ACTIVE_PAGE_TAB_ID_KEY, storageKey]);
+  const previousStorageKey = createPreviousPageContextStorageKey(activeTabId);
+  const stored = await chrome.storage.session.get([ACTIVE_PAGE_TAB_ID_KEY, storageKey, previousStorageKey]);
   const page = stored[storageKey] as PageContentResult | undefined;
+  const previousPage = stored[previousStorageKey] as PageContentResult | undefined;
 
   if (page) {
-    return page;
+    return {
+      page,
+      previousPage: previousPage ?? null,
+    };
   }
 
-  return buildFallbackPageContext('');
+  return {
+    page: buildFallbackPageContext(''),
+    previousPage: null,
+  };
 }
 
 export function usePageContext(): UsePageContextState {
   const [state, setState] = useState<UsePageContextState>({
     page: null,
+    previousPage: null,
     loading: true,
     error: null,
   });
@@ -47,13 +61,14 @@ export function usePageContext(): UsePageContextState {
 
     const refresh = async () => {
       try {
-        const page = await loadStoredPageContext();
+        const context = await loadStoredPageContext();
         if (!isMounted) {
           return;
         }
 
         setState({
-          page,
+          page: context.page,
+          previousPage: context.previousPage,
           loading: false,
           error: null,
         });
@@ -64,6 +79,7 @@ export function usePageContext(): UsePageContextState {
 
         setState({
           page: null,
+          previousPage: null,
           loading: false,
           error: error instanceof Error ? error.message : 'Failed to load page context.',
         });

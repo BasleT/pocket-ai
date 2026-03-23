@@ -31,6 +31,10 @@ export function resolveOcrInput(input: OcrInput): OcrInput {
     return input;
   }
 
+  if (input.startsWith('data:image/')) {
+    return input;
+  }
+
   const parsed = new URL(input);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Unsupported image URL protocol');

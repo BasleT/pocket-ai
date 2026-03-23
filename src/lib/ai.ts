@@ -152,21 +152,23 @@ export function buildPageContextSystemPrompt(
     'You are a helpful AI assistant in a browser sidebar.',
     `Content type: ${CONTENT_TYPE_META[contentType].label}`,
     instructions,
-    `The user is currently reading: ${page.title}`,
-    `URL: ${page.url}`,
+    `Currently reading: ${page.title}`,
+    `Current URL: ${page.url}`,
     '',
     content,
   ];
 
   if (options?.includePreviousContext && options.previousPage?.content) {
+    const previous = options.previousPage;
+    const previousSnippet = previous.content.slice(0, 3000);
+
     prompt.push(
       '',
+      `Previously reading: ${previous.title}`,
+      previousSnippet,
       '---',
-      'Previous page context (use only when it helps answer cross-tab questions):',
-      `Title: ${options.previousPage.title}`,
-      `URL: ${options.previousPage.url}`,
-      '',
-      truncateContext(options.previousPage.content),
+      `Currently reading: ${page.title}`,
+      content,
     );
   }
 
