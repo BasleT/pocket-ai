@@ -327,6 +327,19 @@ async function handleTestProviderConnection(provider: ApiProviderId): Promise<Te
 }
 
 export default defineBackground(() => {
+  const openSidePanelTabs = new Set<number>();
+
+  const toggleSidePanelForTab = async (tabId: number) => {
+    if (openSidePanelTabs.has(tabId)) {
+      await chrome.sidePanel.close({ tabId });
+      openSidePanelTabs.delete(tabId);
+      return;
+    }
+
+    await chrome.sidePanel.open({ tabId });
+    openSidePanelTabs.add(tabId);
+  };
+
   void syncEmbedRules();
   void ensureOcrContextMenu();
 
@@ -358,9 +371,20 @@ export default defineBackground(() => {
 
     try {
       await chrome.sidePanel.open({ tabId: tab.id });
+      openSidePanelTabs.add(tab.id);
     } catch (error) {
       console.error('Failed to open side panel', error);
     }
+  });
+
+  chrome.commands.onCommand.addListener((command, tab) => {
+    if (command !== 'toggle-sidepanel' || !tab?.id) {
+      return;
+    }
+
+    void toggleSidePanelForTab(tab.id).catch((error) => {
+      console.error('Failed to toggle side panel from shortcut', error);
+    });
   });
 
   chrome.runtime.onConnect.addListener((port) => {

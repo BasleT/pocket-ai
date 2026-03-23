@@ -8,7 +8,11 @@ type EmbedProviderTabProps = {
 
 export function EmbedProviderTab({ providers, activeId, onSelect }: EmbedProviderTabProps) {
   return (
-    <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-100 p-1">
+    <div
+      className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800"
+      role="tablist"
+      aria-label="Embedded provider tabs"
+    >
       {providers.map((provider) => {
         const isActive = provider.id === activeId;
 
@@ -24,6 +28,8 @@ export function EmbedProviderTab({ providers, activeId, onSelect }: EmbedProvide
             }`}
             aria-pressed={isActive}
             aria-label={`Switch to ${provider.name}`}
+            role="tab"
+            aria-selected={isActive}
           >
             <span
               className={`inline-block h-2 w-2 rounded-full ${provider.colorClass}`}

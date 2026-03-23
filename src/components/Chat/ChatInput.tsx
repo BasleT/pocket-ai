@@ -33,7 +33,7 @@ export function ChatInput({ isDisabled = false, value, onChange, onSend }: ChatI
   };
 
   return (
-    <div className="border-t border-slate-200 bg-white p-3">
+    <div className="border-t border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
       <textarea
         value={currentValue}
         onChange={(event) => setValue(event.target.value)}
@@ -44,8 +44,9 @@ export function ChatInput({ isDisabled = false, value, onChange, onSend }: ChatI
           }
         }}
         placeholder="Ask anything... (Ctrl+Enter to send)"
-        className="h-24 w-full resize-none rounded-md border border-slate-300 p-2 text-sm outline-none transition focus:border-slate-500"
+        className="h-24 w-full resize-none rounded-md border border-slate-300 p-2 text-sm outline-none transition focus:border-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
         disabled={isDisabled}
+        aria-label="Chat input"
       />
       <div className="mt-2 flex justify-end">
         <button
@@ -53,6 +54,7 @@ export function ChatInput({ isDisabled = false, value, onChange, onSend }: ChatI
           onClick={submit}
           disabled={isDisabled || currentValue.trim().length === 0}
           className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          aria-label="Send message"
         >
           Send
         </button>

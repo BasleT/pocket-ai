@@ -1,75 +1,108 @@
-# pocket-ai
+# Pocket AI
 
-AI-powered browser sidebar — chat, summarize, PDF, OCR. Embeds ChatGPT, Claude & Gemini using your existing login. Free models via Groq included.
+Chrome/Edge side panel extension for AI chat, page summarization, YouTube summaries, PDF chat, and OCR.
 
-## How Providers Work
+## What This Package Is
 
-**Embedded tab (your existing subscriptions):** ChatGPT, Claude, Gemini, Grok, and DeepSeek load directly inside the sidebar using your existing browser login. Uses Chrome's `declarativeNetRequest` API to strip `X-Frame-Options` headers so they can embed — your auth cookies are never touched. Just be logged in and it works.
+This repo builds a Manifest V3 browser extension with two usage modes:
 
-**API mode (free + BYO key):** Direct API calls via Vercel AI SDK for power features like page summarization, PDF chat, and OCR. Groq's free tier (Llama 3.3 70B) works with no setup. Optionally add your own OpenAI/Anthropic/Google keys.
+- **Embed mode:** loads provider sites (ChatGPT, Claude, Gemini, Grok, DeepSeek) in sidepanel tabs.
+- **AI mode:** streams model responses with context tools (page, YouTube transcript, PDF, OCR).
 
-## Quickstart for OpenCode
+## Prerequisites
 
-### 1. Install Superpowers
-In your first OpenCode session, paste this:
-```
-Fetch and follow instructions from https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.opencode/INSTALL.md
-```
-Restart OpenCode.
+- Bun 1.3+
+- Chrome or Edge (Chromium)
 
-### 2. Start the project
+## Install
+
 ```bash
-git clone <your-repo>
-cd ai-sidebar
-opencode
+bun install
 ```
 
-### 3. Get your free Groq API key
-1. Go to https://console.groq.com — sign up free, no credit card
-2. Create an API key
-3. Set it: `export VITE_GROQ_API_KEY=gsk_your_key_here`
+## Development
 
-### 4. Tell OpenCode to start building
-```
-Start with Phase 0 from PLAN.md. Use @swarm/planner to decompose the tasks.
+Run live development build:
+
+```bash
+bun run dev
 ```
 
-## Key Files
-| File | Purpose |
-|------|---------|
-| `AGENTS.md` | Rules and conventions for all agents |
-| `PLAN.md` | Phased implementation plan with task IDs |
-| `opencode.json` | OpenCode config: plugins, MCP servers, permissions |
-| `.opencode/agents/` | Custom subagent definitions |
-| `.opencode/skills/` | Reference docs injected on demand |
+Firefox dev target:
 
-## Agent Reference
-| Agent | Invoke | Use for |
-|-------|--------|---------|
-| Build | (default) | Writing code, implementing tasks |
-| Plan | `Tab` key | Analyzing before coding |
-| @architect | `@architect` | Structural decisions, new deps |
-| @reviewer | `@reviewer` | Code review before marking done |
-| @tester | `@tester` | Writing and running tests |
-| @ui-specialist | `@ui-specialist` | React components, Tailwind |
-| @swarm/planner | `@swarm/planner` | Decompose a phase into parallel tasks |
-| @swarm/worker | (invoked by planner) | Execute individual tasks |
+```bash
+bun run dev:firefox
+```
 
-## MCP Servers
-| Server | Purpose |
-|--------|---------|
-| playwright | Browser automation for testing the extension |
-| context7 | Fetch live docs for WXT, Vercel AI SDK, etc. |
-| github | (optional) PR creation, CI status |
+## Build
 
-## Tech Stack
-- **WXT** — Chrome extension framework (Vite-based)
-- **React + TypeScript** — UI
-- **Tailwind CSS** — Styling
-- **declarativeNetRequest** — strips X-Frame-Options for iframe embedding (built-in Chrome API)
-- **Vercel AI SDK** — Multi-model streaming for API mode
-- **Groq** — Free AI backend (Llama 3.3 70B, Mixtral) — no credit card
-- **pdfjs-dist** — PDF parsing
-- **Tesseract.js** — OCR
-- **@mozilla/readability** — Page content extraction
-- **youtube-transcript** — YouTube captions
+Build production extension output:
+
+```bash
+bun run build
+```
+
+Output directory:
+
+- `.output/chrome-mv3`
+
+## Load Unpacked Extension (Chrome/Edge)
+
+1. Run `bun run build`
+2. Open `chrome://extensions` (or `edge://extensions`)
+3. Enable **Developer mode**
+4. Click **Load unpacked**
+5. Select `.output/chrome-mv3`
+
+## Tests and Verification
+
+Type check:
+
+```bash
+bun run typecheck
+```
+
+Targeted test examples:
+
+```bash
+bun run test src/lib/ai.test.ts
+bun run test src/lib/secureStorage.test.ts
+bun run test src/lib/extractors/pdf.test.ts
+```
+
+## Package / Zip
+
+Create extension zip for distribution:
+
+```bash
+bun run zip
+```
+
+Zip output example:
+
+- `.output/pocket-ai-0.1.0-chrome.zip`
+
+## Key Runtime Features
+
+- Streaming chat with provider-based model routing
+- Encrypted API key storage (AES-GCM via Web Crypto)
+- Right-click image OCR (`Extract text from image`)
+- PDF parsing with OCR fallback and chunked context
+- YouTube transcript summarization
+- Theme modes (system/light/dark)
+- Keyboard shortcut: `Alt+Shift+S` toggles sidepanel
+
+## Important Files
+
+- `entrypoints/background.ts`: MV3 worker, routing, context menu, connection tests
+- `entrypoints/sidepanel/App.tsx`: main app integration
+- `src/lib/ai.ts`: model/provider routing and stream helper
+- `src/lib/secureStorage.ts`: encrypted secret handling
+- `src/components/Settings/SettingsPanel.tsx`: provider toggles, keys, connection tests
+- `wxt.config.ts`: extension config/manifest fields
+
+## Notes
+
+- YouTube summary depends on caption availability.
+- OCR and PDF OCR are compute-heavy; first use may feel slower.
+- Keep API keys in Settings; do not hardcode secrets in source.

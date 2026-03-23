@@ -8,6 +8,7 @@ import type {
   LocalChatMessage,
   SerializableModelMessage,
 } from '../../types/chat';
+import { Skeleton } from '../common/Skeleton';
 import { ChatInput } from './ChatInput';
 import { ChatMessage } from './ChatMessage';
 
@@ -202,26 +203,30 @@ export function ChatWindow({
   };
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
-        <p className="text-xs text-slate-600">Streaming chat</p>
+    <section className="flex min-h-0 flex-1 flex-col" aria-label="Chat window">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+        <p className="text-xs text-slate-600 dark:text-slate-300">Streaming chat</p>
         <button
           type="button"
           onClick={clearChat}
           disabled={isStreaming || !hasMessages}
-          className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+          aria-label="Clear chat history"
         >
           Clear chat
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-100 p-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-100 p-3 dark:bg-slate-800">
         {messages.length === 0 ? (
-          <p className="text-center text-xs text-slate-500">Start a conversation in AI mode.</p>
+          <p className="text-center text-xs text-slate-500 dark:text-slate-300">Start a conversation in AI mode.</p>
         ) : null}
         {messages.map((message) => (
           <ChatMessage key={message.id} message={message} />
         ))}
+        {isStreaming && messages[messages.length - 1]?.content.length === 0 ? (
+          <Skeleton className="h-16 w-2/3" />
+        ) : null}
         <div ref={scrollAnchorRef} />
       </div>
 
@@ -232,6 +237,7 @@ export function ChatWindow({
             type="button"
             onClick={retry}
             className="mt-2 rounded bg-rose-600 px-2 py-1 text-white hover:bg-rose-700"
+            aria-label="Retry failed request"
           >
             Retry
           </button>

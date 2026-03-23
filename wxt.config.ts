@@ -21,5 +21,13 @@ export default defineConfig({
     side_panel: {
       default_path: 'sidepanel.html',
     },
+    commands: {
+      'toggle-sidepanel': {
+        suggested_key: {
+          default: 'Alt+Shift+S',
+        },
+        description: 'Toggle Pocket AI side panel',
+      },
+    },
   },
 });

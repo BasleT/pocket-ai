@@ -38,7 +38,10 @@ export type AppSettings = {
   ocrLanguage: OcrLanguage;
 };
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 export const EMBED_PROVIDER_TOGGLE_STORAGE_KEY = 'settings.embedProviders';
+export const THEME_MODE_STORAGE_KEY = 'settings.themeMode';
 
 export const API_KEY_FIELD_MAP: Record<ApiProviderId, keyof ApiProviderSecrets> = {
   groq: 'groqApiKey',

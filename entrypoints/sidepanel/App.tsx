@@ -6,6 +6,7 @@ import { PdfUpload } from '../../src/components/PdfReader/PdfUpload';
 import { EmbedProvider } from '../../src/components/providers/EmbedProvider';
 import { EmbedProviderTab } from '../../src/components/providers/EmbedProviderTab';
 import { SettingsPanel } from '../../src/components/Settings/SettingsPanel';
+import { Skeleton } from '../../src/components/common/Skeleton';
 import { OcrResultPanel } from '../../src/components/Summarizer/OcrResultPanel';
 import { YouTubeSummarizer } from '../../src/components/Summarizer/YouTubeSummarizer';
 import { ContextBar } from '../../src/components/Toolbar/ContextBar';
@@ -26,10 +27,12 @@ import type { GetPageContentResponse, PageContentResult } from '../../src/types/
 import {
   API_KEY_FIELD_MAP,
   EMBED_PROVIDER_TOGGLE_STORAGE_KEY,
+  THEME_MODE_STORAGE_KEY,
   type ApiProviderId,
   type ConnectionTestStatus,
   type EmbedProviderToggles,
   type TestConnectionResponse,
+  type ThemeMode,
 } from '../../src/types/settings';
 import type { GetYouTubeContextResponse, YouTubeContextData } from '../../src/types/youtube';
 import { OCR_LANGUAGE_STORAGE_KEY, OCR_RESULT_STORAGE_KEY } from '../../src/types/ocr';
@@ -84,6 +87,8 @@ function App() {
   const [openProviderIds, setOpenProviderIds] = useState<ProviderId[]>([DEFAULT_PROVIDER_ID]);
   const [mode, setMode] = useState<SidebarMode>('embed');
   const [selectedModelId, setSelectedModelId] = useState<ChatModelId>(DEFAULT_MODEL_ID);
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [prefersDark, setPrefersDark] = useState(false);
   const [embedProviderToggles, setEmbedProviderToggles] = useState<EmbedProviderToggles>(
     createDefaultEmbedProviderToggles(),
   );
@@ -136,12 +141,13 @@ function App() {
 
   useEffect(() => {
     const loadSessionState = async () => {
-      const [activeProvider, openProviders, savedMode, storedModelId, storedProviderToggles] = await Promise.all([
+      const [activeProvider, openProviders, savedMode, storedModelId, storedProviderToggles, storedThemeMode] = await Promise.all([
         storageGet<string>('session', ACTIVE_PROVIDER_KEY),
         storageGet<string[]>('session', OPEN_PROVIDERS_KEY),
         storageGet<string>('session', SIDEBAR_MODE_KEY),
         storageGet<string>('session', SELECTED_MODEL_KEY),
         storageGet<EmbedProviderToggles>('local', EMBED_PROVIDER_TOGGLE_STORAGE_KEY),
+        storageGet<ThemeMode>('local', THEME_MODE_STORAGE_KEY),
       ]);
 
       const [storedOcrResult, storedOcrLanguage, groqApiKey, openAiApiKey, anthropicApiKey, googleApiKey] =
@@ -178,6 +184,10 @@ function App() {
           ...createDefaultEmbedProviderToggles(),
           ...storedProviderToggles,
         });
+      }
+
+      if (storedThemeMode === 'light' || storedThemeMode === 'dark' || storedThemeMode === 'system') {
+        setThemeMode(storedThemeMode);
       }
 
       if (storedOcrResult) {
@@ -225,6 +235,23 @@ function App() {
 
     void storageSet('local', OCR_LANGUAGE_STORAGE_KEY, ocrLanguage);
   }, [loadedFromSession, ocrLanguage]);
+
+  useEffect(() => {
+    if (!loadedFromSession) {
+      return;
+    }
+
+    void storageSet('local', THEME_MODE_STORAGE_KEY, themeMode);
+  }, [loadedFromSession, themeMode]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    setPrefersDark(media.matches);
+
+    const listener = (event: MediaQueryListEvent) => setPrefersDark(event.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, []);
 
   useEffect(() => {
     const onMessage = (message: OcrUpdatedMessage) => {
@@ -369,6 +396,8 @@ function App() {
     }
   }, [availableModels, selectedModelId]);
 
+  const isDark = themeMode === 'dark' || (themeMode === 'system' && prefersDark);
+
   const contextSections: string[] = [];
 
   if (pageContext) {
@@ -416,25 +445,33 @@ function App() {
   };
 
   return (
-    <main className="flex h-screen flex-col bg-slate-50 text-slate-900">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
+    <main
+      className={`${isDark ? 'dark' : ''} flex h-screen flex-col bg-gradient-to-b from-slate-50 to-slate-100 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-slate-100`}
+    >
+      <header className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/90">
         <h1 className="text-sm font-semibold">Pocket AI</h1>
-        <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs">
+        <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs dark:border-slate-700 dark:bg-slate-800">
           <button
             type="button"
             className={`rounded px-2 py-1 ${
-              mode === 'embed' ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-600'
+              mode === 'embed'
+                ? 'bg-white font-medium text-slate-900 shadow-sm dark:bg-slate-100'
+                : 'text-slate-600 dark:text-slate-300'
             }`}
             onClick={() => setMode('embed')}
+            aria-label="Switch to embed mode"
           >
             Embed
           </button>
           <button
             type="button"
             className={`rounded px-2 py-1 ${
-              mode === 'ai' ? 'bg-white font-medium text-slate-900 shadow-sm' : 'text-slate-600'
+              mode === 'ai'
+                ? 'bg-white font-medium text-slate-900 shadow-sm dark:bg-slate-100'
+                : 'text-slate-600 dark:text-slate-300'
             }`}
             onClick={() => setMode('ai')}
+            aria-label="Switch to AI mode"
           >
             AI
           </button>
@@ -460,7 +497,7 @@ function App() {
         </>
       ) : (
         <section className="flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
             <ModelPicker value={selectedModelId} models={availableModels} onChange={setSelectedModelId} />
             <button
               type="button"
@@ -472,7 +509,8 @@ function App() {
                 setQuickPromptDraft(buildPageSummarizePrompt(pageContext));
               }}
               disabled={!pageContext}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+              aria-label="Summarize current page"
             >
               Summarize this page
             </button>
@@ -487,8 +525,8 @@ function App() {
           ) : null}
 
           {isContextLoading ? (
-            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              Loading page context...
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+              <Skeleton className="h-3 w-40" />
             </div>
           ) : null}
 
@@ -502,7 +540,9 @@ function App() {
             embedProviderToggles={embedProviderToggles}
             apiKeyConfigured={apiKeyConfigured}
             connectionStatuses={connectionStatuses}
+            themeMode={themeMode}
             onProviderToggle={handleEmbedProviderToggle}
+            onThemeModeChange={setThemeMode}
             onSaveApiKey={handleSaveApiKey}
             onClearApiKey={handleClearApiKey}
             onTestConnection={handleTestConnection}
@@ -520,6 +560,12 @@ function App() {
                 setSendRequest({ id: crypto.randomUUID(), text: prompt });
               }}
             />
+          ) : null}
+
+          {isYouTubeLoading ? (
+            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+              <Skeleton className="h-3 w-48" />
+            </div>
           ) : null}
 
           <OcrResultPanel
