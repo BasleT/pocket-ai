@@ -1,6 +1,7 @@
 # WXT build output
 .output/
 .wxt/
+.worktrees/
 
 # Dependencies
 node_modules/
