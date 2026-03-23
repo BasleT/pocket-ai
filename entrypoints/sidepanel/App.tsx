@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { ChatWindow } from '../../src/components/Chat/ChatWindow';
+import { PdfChat } from '../../src/components/PdfReader/PdfChat';
+import { PdfUpload } from '../../src/components/PdfReader/PdfUpload';
 import { EmbedProvider } from '../../src/components/providers/EmbedProvider';
 import { EmbedProviderTab } from '../../src/components/providers/EmbedProviderTab';
 import { YouTubeSummarizer } from '../../src/components/Summarizer/YouTubeSummarizer';
@@ -12,8 +14,10 @@ import {
   type ProviderId,
 } from '../../src/components/providers/providerConfig';
 import { GROQ_MODELS } from '../../src/lib/ai';
+import { buildPdfSystemContext, parsePdfFile } from '../../src/lib/extractors/pdf';
 import { storageGet, storageSet } from '../../src/lib/storage';
 import type { GroqModelId } from '../../src/types/chat';
+import type { PdfParseProgress, PdfParseResult } from '../../src/types/pdf';
 import type { GetPageContentResponse, PageContentResult } from '../../src/types/page';
 import type { GetYouTubeContextResponse, YouTubeContextData } from '../../src/types/youtube';
 
@@ -66,6 +70,10 @@ function App() {
   const [quickPromptDraft, setQuickPromptDraft] = useState('');
   const [youtubeContext, setYouTubeContext] = useState<YouTubeContextData | null>(null);
   const [isYouTubeLoading, setIsYouTubeLoading] = useState(false);
+  const [parsedPdf, setParsedPdf] = useState<PdfParseResult | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [isPdfParsing, setIsPdfParsing] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState<PdfParseProgress | null>(null);
   const [sendRequest, setSendRequest] = useState<{ id: string; text: string } | null>(null);
   const [loadedFromSession, setLoadedFromSession] = useState(false);
 
@@ -175,15 +183,51 @@ function App() {
     void loadYouTubeContext();
   }, [mode]);
 
-  const contextSystemMessage = pageContext
-    ? [
+  const contextSections: string[] = [];
+
+  if (pageContext) {
+    contextSections.push(
+      [
         'You are helping the user with the currently open page.',
         `Page title: ${pageContext.title}`,
         `Page URL: ${pageContext.url}`,
         pageContext.selection ? `Selected text: ${pageContext.selection}` : 'Selected text: none',
         `Page content:\n${pageContext.content}`,
-      ].join('\n\n')
-    : undefined;
+      ].join('\n\n'),
+    );
+  }
+
+  if (parsedPdf) {
+    contextSections.push(
+      buildPdfSystemContext({
+        fileName: parsedPdf.fileName,
+        pageCount: parsedPdf.pageCount,
+        source: parsedPdf.source,
+        chunks: parsedPdf.chunks,
+      }),
+    );
+  }
+
+  const contextSystemMessage = contextSections.length > 0 ? contextSections.join('\n\n---\n\n') : undefined;
+
+  const handlePdfFileSelected = async (file: File) => {
+    setIsPdfParsing(true);
+    setPdfError(null);
+    setPdfProgress(null);
+
+    try {
+      const result = await parsePdfFile(file, {
+        onProgress: (progress) => setPdfProgress(progress),
+      });
+
+      setParsedPdf(result);
+    } catch (error) {
+      setParsedPdf(null);
+      setPdfError(error instanceof Error ? error.message : 'Failed to parse PDF.');
+    } finally {
+      setIsPdfParsing(false);
+    }
+  };
 
   return (
     <main className="flex h-screen flex-col bg-slate-50 text-slate-900">
@@ -281,6 +325,25 @@ function App() {
               }}
             />
           ) : null}
+
+          <PdfUpload
+            isParsing={isPdfParsing}
+            progress={pdfProgress}
+            pageCount={parsedPdf?.pageCount ?? null}
+            onFileSelected={(file) => {
+              void handlePdfFileSelected(file);
+            }}
+          />
+
+          <PdfChat
+            parsedPdf={parsedPdf}
+            errorMessage={pdfError}
+            onClear={() => {
+              setParsedPdf(null);
+              setPdfError(null);
+              setPdfProgress(null);
+            }}
+          />
 
           <ChatWindow
             modelId={selectedModelId}
