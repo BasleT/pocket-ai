@@ -1,4 +1,5 @@
 import { recognizeCanvasText } from './ocr';
+import type { OcrLanguage } from './ocr';
 import type { PdfParseProgress, PdfParseResult, PdfParseSource } from '../../types/pdf';
 
 const DEFAULT_CHUNK_SIZE = 3_200;
@@ -6,7 +7,7 @@ const DEFAULT_MAX_CONTEXT_CHUNKS = 6;
 
 type ParsePdfOptions = {
   onProgress?: (progress: PdfParseProgress) => void;
-  ocrLanguage?: string;
+  ocrLanguage?: OcrLanguage;
   chunkSize?: number;
 };
 

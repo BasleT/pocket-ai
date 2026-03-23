@@ -1,13 +1,20 @@
 import { registerEmbedRules } from '../src/lib/declarativeRules';
 import { streamChat } from '../src/lib/ai';
+import { DEFAULT_OCR_LANGUAGE, normalizeOcrLanguage, recognizeImageText } from '../src/lib/extractors/ocr';
 import { chunkTranscript, fetchTranscriptByVideoId } from '../src/lib/extractors/youtube';
 import type { ChatPortResponse, ChatStreamStartMessage, SerializableModelMessage } from '../src/types/chat';
+import type { OcrResult } from '../src/types/ocr';
 import type { GetPageContentMessage, GetPageContentResponse } from '../src/types/page';
 import type {
   GetYouTubeContextResponse,
   GetYouTubeVideoInfoMessage,
   GetYouTubeVideoInfoResponse,
 } from '../src/types/youtube';
+import {
+  OCR_CONTEXT_MENU_ID,
+  OCR_LANGUAGE_STORAGE_KEY,
+  OCR_RESULT_STORAGE_KEY,
+} from '../src/types/ocr';
 
 async function syncEmbedRules(): Promise<void> {
   try {
@@ -224,15 +231,71 @@ async function handleGetYouTubeContextRequest(): Promise<GetYouTubeContextRespon
   }
 }
 
+async function ensureOcrContextMenu(): Promise<void> {
+  try {
+    await chrome.contextMenus.remove(OCR_CONTEXT_MENU_ID);
+  } catch {
+    // Ignore if it doesn't exist yet.
+  }
+
+  await chrome.contextMenus.create({
+    id: OCR_CONTEXT_MENU_ID,
+    title: 'Extract text from image',
+    contexts: ['image'],
+  });
+}
+
+async function getSelectedOcrLanguage(): Promise<ReturnType<typeof normalizeOcrLanguage>> {
+  const stored = await chrome.storage.local.get(OCR_LANGUAGE_STORAGE_KEY);
+  return normalizeOcrLanguage(stored[OCR_LANGUAGE_STORAGE_KEY] as string | undefined);
+}
+
+async function persistOcrResult(result: OcrResult): Promise<void> {
+  await chrome.storage.session.set({ [OCR_RESULT_STORAGE_KEY]: result });
+  void chrome.runtime.sendMessage({ type: 'OCR_RESULT_UPDATED', result });
+}
+
+async function handleImageOcrClick(imageUrl: string): Promise<void> {
+  const selectedLanguage = await getSelectedOcrLanguage();
+
+  try {
+    const text = await recognizeImageText(imageUrl, selectedLanguage);
+    await persistOcrResult({
+      text,
+      language: selectedLanguage,
+      imageUrl,
+      capturedAt: Date.now(),
+    });
+  } catch (error) {
+    await persistOcrResult({
+      text: '',
+      language: selectedLanguage,
+      imageUrl,
+      capturedAt: Date.now(),
+      error: error instanceof Error ? error.message : 'OCR extraction failed.',
+    });
+  }
+}
+
 export default defineBackground(() => {
   void syncEmbedRules();
+  void ensureOcrContextMenu();
 
   chrome.runtime.onInstalled.addListener(() => {
     void syncEmbedRules();
+    void ensureOcrContextMenu();
+    void chrome.storage.local.get(OCR_LANGUAGE_STORAGE_KEY).then((stored) => {
+      if (!stored[OCR_LANGUAGE_STORAGE_KEY]) {
+        return chrome.storage.local.set({ [OCR_LANGUAGE_STORAGE_KEY]: DEFAULT_OCR_LANGUAGE });
+      }
+
+      return undefined;
+    });
   });
 
   chrome.runtime.onStartup.addListener(() => {
     void syncEmbedRules();
+    void ensureOcrContextMenu();
   });
 
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((error) => {
@@ -263,6 +326,14 @@ export default defineBackground(() => {
 
       void handleChatStream(port, rawMessage);
     });
+  });
+
+  chrome.contextMenus.onClicked.addListener((info) => {
+    if (info.menuItemId !== OCR_CONTEXT_MENU_ID || typeof info.srcUrl !== 'string') {
+      return;
+    }
+
+    void handleImageOcrClick(info.srcUrl);
   });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

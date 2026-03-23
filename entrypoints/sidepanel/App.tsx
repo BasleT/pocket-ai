@@ -5,6 +5,7 @@ import { PdfChat } from '../../src/components/PdfReader/PdfChat';
 import { PdfUpload } from '../../src/components/PdfReader/PdfUpload';
 import { EmbedProvider } from '../../src/components/providers/EmbedProvider';
 import { EmbedProviderTab } from '../../src/components/providers/EmbedProviderTab';
+import { OcrResultPanel } from '../../src/components/Summarizer/OcrResultPanel';
 import { YouTubeSummarizer } from '../../src/components/Summarizer/YouTubeSummarizer';
 import { ContextBar } from '../../src/components/Toolbar/ContextBar';
 import { ModelPicker } from '../../src/components/Toolbar/ModelPicker';
@@ -15,11 +16,14 @@ import {
 } from '../../src/components/providers/providerConfig';
 import { GROQ_MODELS } from '../../src/lib/ai';
 import { buildPdfSystemContext, parsePdfFile } from '../../src/lib/extractors/pdf';
+import { DEFAULT_OCR_LANGUAGE, normalizeOcrLanguage, type OcrLanguage } from '../../src/lib/extractors/ocr';
 import { storageGet, storageSet } from '../../src/lib/storage';
 import type { GroqModelId } from '../../src/types/chat';
+import type { OcrResult, OcrUpdatedMessage } from '../../src/types/ocr';
 import type { PdfParseProgress, PdfParseResult } from '../../src/types/pdf';
 import type { GetPageContentResponse, PageContentResult } from '../../src/types/page';
 import type { GetYouTubeContextResponse, YouTubeContextData } from '../../src/types/youtube';
+import { OCR_LANGUAGE_STORAGE_KEY, OCR_RESULT_STORAGE_KEY } from '../../src/types/ocr';
 
 type SidebarMode = 'embed' | 'ai';
 
@@ -74,6 +78,8 @@ function App() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [isPdfParsing, setIsPdfParsing] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<PdfParseProgress | null>(null);
+  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
+  const [ocrLanguage, setOcrLanguage] = useState<OcrLanguage>(DEFAULT_OCR_LANGUAGE);
   const [sendRequest, setSendRequest] = useState<{ id: string; text: string } | null>(null);
   const [loadedFromSession, setLoadedFromSession] = useState(false);
 
@@ -86,6 +92,11 @@ function App() {
         storageGet<string[]>('session', OPEN_PROVIDERS_KEY),
         storageGet<string>('session', SIDEBAR_MODE_KEY),
         storageGet<string>('session', SELECTED_MODEL_KEY),
+      ]);
+
+      const [storedOcrResult, storedOcrLanguage] = await Promise.all([
+        storageGet<OcrResult>('session', OCR_RESULT_STORAGE_KEY),
+        storageGet<string>('local', OCR_LANGUAGE_STORAGE_KEY),
       ]);
 
       if (activeProvider && isProviderId(activeProvider)) {
@@ -107,6 +118,12 @@ function App() {
         setSelectedModelId(storedModelId);
       }
 
+      if (storedOcrResult) {
+        setOcrResult(storedOcrResult);
+      }
+
+      setOcrLanguage(normalizeOcrLanguage(storedOcrLanguage));
+
       setLoadedFromSession(true);
     };
 
@@ -123,6 +140,29 @@ function App() {
     void storageSet('session', SIDEBAR_MODE_KEY, mode);
     void storageSet('session', SELECTED_MODEL_KEY, selectedModelId);
   }, [activeProviderId, loadedFromSession, mode, openProviderIds, selectedModelId]);
+
+  useEffect(() => {
+    if (!loadedFromSession) {
+      return;
+    }
+
+    void storageSet('local', OCR_LANGUAGE_STORAGE_KEY, ocrLanguage);
+  }, [loadedFromSession, ocrLanguage]);
+
+  useEffect(() => {
+    const onMessage = (message: OcrUpdatedMessage) => {
+      if (!message || message.type !== 'OCR_RESULT_UPDATED') {
+        return;
+      }
+
+      setOcrResult(message.result);
+    };
+
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => {
+      chrome.runtime.onMessage.removeListener(onMessage);
+    };
+  }, []);
 
   const handleProviderSelect = (providerId: ProviderId) => {
     setActiveProviderId(providerId);
@@ -325,6 +365,12 @@ function App() {
               }}
             />
           ) : null}
+
+          <OcrResultPanel
+            result={ocrResult}
+            selectedLanguage={ocrLanguage}
+            onLanguageChange={setOcrLanguage}
+          />
 
           <PdfUpload
             isParsing={isPdfParsing}
