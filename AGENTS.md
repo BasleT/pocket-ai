@@ -1,156 +1,119 @@
-# AI Browser Sidebar — AGENTS.md
+# pocket-ai — AGENTS.md
 
 ## Project Overview
-This is a Chrome extension AI sidebar (Sider AI clone) built with:
-- **WXT** (Vite-based extension framework)
-- **React + TypeScript** (UI)
-- **Tailwind CSS** (styling)
-- **Vercel AI SDK** (`ai` npm package) for streaming multi-model chat
-- **Groq** as the primary free AI backend (no credit card required)
-- **pdfjs-dist** (Mozilla PDF.js) for PDF parsing
-- **Tesseract.js** for OCR (image → text)
-- **@mozilla/readability** (Readability.js) for page content extraction
-- **youtube-transcript** for YouTube summarization
+A Chrome extension AI sidebar inspired by Sider AI. Built with:
+- **WXT** — Chrome extension framework (Vite-based)
+- **React + TypeScript** — UI
+- **Tailwind CSS** — styling (custom purple accent `#7c3aed`)
+- **Vercel AI SDK** (`ai` + `@ai-sdk/groq`) — streaming AI
+- **Groq** — free AI backend (Llama 3.3 70B), key in `GROQ_API_KEY` env var
+- **@mozilla/readability** — page content extraction
+- **pdfjs-dist** — PDF parsing
+- **Tesseract.js** — OCR
+- **youtube-transcript** — YouTube captions
 
-## Provider Architecture
-There are two completely separate provider modes:
-
-### Mode A — Embedded (iframe) Providers
-Loads the actual AI website (chat.openai.com, claude.ai, gemini.google.com) inside the sidebar panel using an iframe. Uses `declarativeNetRequest` to strip `X-Frame-Options` headers so the sites can embed. Auth is handled entirely by the provider's own website — we never touch tokens or cookies. User just needs to be logged in to that site in Chrome as normal.
-
-**Providers:** ChatGPT, Claude, Gemini, Grok, DeepSeek
-**How:** Strip X-Frame-Options header via declarativeNetRequest rules, render in iframe
-**User requirement:** Already logged into that site in Chrome
-
-### Mode B — API Providers
-Direct API calls via Vercel AI SDK. Required for power features (page summarization, PDF chat, OCR context injection) since those need to inject custom system prompts — which you can't do via iframe.
-
-**Free tier:** Groq (no key needed to start), Google AI Studio free tier, OpenRouter free models
-**BYO key:** OpenAI, Anthropic, Groq, Google AI Studio
-**How:** Vercel AI SDK streaming through background service worker
+## Design Philosophy
+Inspired by Sider AI — clean, minimal, lots of whitespace. Right-side vertical icon rail, main panel to the left. Always-on page awareness — the extension always knows what page the user is on without any user action. Purple accent color (`#7c3aed`). Light theme default.
 
 ## Project Structure
 ```
-.
-├── AGENTS.md                  ← you are here
-├── PLAN.md                    ← implementation phases & tasks
-├── opencode.json              ← opencode config (MCP servers, plugins, agents)
-├── .opencode/
-│   ├── agents/                ← custom subagent definitions
-│   │   ├── architect.md
-│   │   ├── reviewer.md
-│   │   ├── tester.md
-│   │   └── ui-specialist.md
-│   └── skills/                ← project-specific skills
-│       ├── chrome-extension.md
-│       ├── wxt-patterns.md
-│       └── ai-streaming.md
-├── src/
-│   ├── entrypoints/
-│   │   ├── background.ts      ← service worker (API calls, message routing, declarativeNetRequest)
-│   │   ├── content.ts         ← page content extractor
-│   │   ├── sidepanel/         ← main sidebar React app
-│   │   │   ├── index.html
-│   │   │   ├── main.tsx
-│   │   │   └── App.tsx
-│   │   └── popup/             ← toolbar icon popup (minimal)
-│   ├── components/
-│   │   ├── providers/
-│   │   │   ├── EmbedProvider.tsx     ← iframe wrapper + tab bar (ChatGPT/Claude/Gemini etc.)
-│   │   │   ├── EmbedProviderTab.tsx  ← individual provider tab
-│   │   │   └── providerConfig.ts     ← list of embeddable providers + their URLs
-│   │   ├── Chat/              ← API mode chat UI
-│   │   ├── Toolbar/
-│   │   ├── PdfReader/
-│   │   ├── Summarizer/
-│   │   └── Settings/
-│   ├── lib/
-│   │   ├── ai.ts              ← Vercel AI SDK setup, model routing
-│   │   ├── declarativeRules.ts ← builds X-Frame-Options strip rules for embed providers
-│   │   ├── extractors/
-│   │   │   ├── page.ts        ← Readability.js page scraper
-│   │   │   ├── pdf.ts         ← PDF.js parser
-│   │   │   ├── ocr.ts         ← Tesseract.js
-│   │   │   └── youtube.ts     ← transcript fetcher
-│   │   └── storage.ts         ← chrome.storage wrappers
-│   └── types/
-│       └── index.ts
-├── public/                    ← extension icons, assets
-├── wxt.config.ts
-├── tailwind.config.ts
-├── tsconfig.json
-└── package.json
+src/
+├── entrypoints/
+│   ├── background.ts          ← service worker: AI calls, message routing, page context storage
+│   ├── content.ts             ← always-running: extracts page content, sends to background
+│   └── sidepanel/
+│       ├── index.html
+│       ├── main.tsx
+│       └── App.tsx            ← activePanel state, renders Shell
+├── components/
+│   ├── layout/
+│   │   ├── Shell.tsx          ← outer flex row: Panel (left) + IconRail (right)
+│   │   ├── IconRail.tsx       ← 48px vertical strip, 6 icons, purple active state
+│   │   └── Panel.tsx          ← renders active feature panel
+│   ├── chat/
+│   │   ├── ChatPanel.tsx
+│   │   ├── ChatWindow.tsx
+│   │   ├── ChatMessage.tsx
+│   │   └── ChatInput.tsx
+│   ├── summarize/
+│   │   └── SummarizePanel.tsx
+│   ├── youtube/
+│   │   └── YouTubePanel.tsx
+│   ├── pdf/
+│   │   ├── PdfUpload.tsx
+│   │   └── PdfChat.tsx
+│   ├── ocr/
+│   │   └── OcrPanel.tsx
+│   └── settings/
+│       └── SettingsPanel.tsx
+├── lib/
+│   ├── ai.ts                  ← Vercel AI SDK + Groq setup, streamChat()
+│   ├── pageContext.ts         ← usePageContext() hook
+│   ├── storage.ts             ← chrome.storage wrappers
+│   └── extractors/
+│       ├── page.ts            ← Readability.js
+│       ├── pdf.ts             ← pdfjs-dist
+│       ├── ocr.ts             ← Tesseract.js
+│       └── youtube.ts         ← youtube-transcript
+└── types/
+    └── index.ts
 ```
 
-## Build & Dev Commands
+## Build Commands
 ```bash
-# Install deps
 bun install
-
-# Dev mode (auto-reloads extension)
-bun run dev
-
-# Production build
-bun run build
-
-# Type check
-bun run typecheck
-
-# Lint
-bun run lint
-
-# Run tests
-bun run test
+bun run dev        # dev mode with HMR
+bun run build      # production build to .output/
+bun run typecheck  # type check
+bun run lint       # lint
+bun run test       # vitest
 ```
 
-## Tech Rules & Conventions
-
-### TypeScript
-- Strict mode enabled — no `any`, no untyped returns on exported functions
-- Use `zod` for runtime schema validation of API responses
-- Prefer `type` over `interface` for simple shapes
-
-### React
-- Functional components only — no class components
-- Co-locate component styles with the component file (Tailwind only, no CSS modules)
-- Use `React.memo` sparingly — only when profiling shows a need
-- State: `useState` for local, `zustand` for shared sidebar state
+## Critical Rules
 
 ### Chrome Extension (MV3)
-- ALL AI API calls (Mode B) go through the **background service worker** — never directly from content scripts
-- Use `chrome.runtime.sendMessage` / `chrome.runtime.onMessage` for content ↔ background comms
-- Use `chrome.sidePanel` API (not popup) for the main UI
-- Use `chrome.storage.local` for settings, `chrome.storage.session` for per-tab context
-- NEVER use `localStorage` or `sessionStorage` in extension contexts
-- The iframe embed (Mode A) uses `declarativeNetRequest` rules to strip `X-Frame-Options` and `Content-Security-Policy` headers on specific provider domains — this is the standard, documented approach used by all major AI sidebar extensions
-- NEVER read, intercept, or transmit cookies or auth tokens from embedded provider iframes — we only strip the header that prevents embedding, nothing else
+- ALL Groq API calls go through the **background service worker** — never from content scripts or sidepanel directly
+- Use `chrome.runtime.sendMessage` / ports for content ↔ background ↔ sidepanel communication
+- Use `chrome.storage.local` for persistent settings (API keys), `chrome.storage.session` for per-tab context
+- NEVER use `localStorage` in extension contexts
+- Return `true` from `onMessage` listeners when using async `sendResponse`
 
-### Streaming
-- Use Server-Sent Events (SSE) via the Vercel AI SDK `streamText()` function
-- Always handle stream errors and show fallback UI — never let a failed stream silently hang
-- Timeout streams after 30 seconds
+### Always-On Page Context
+- Content script runs on EVERY page, ALWAYS
+- Extracts page text with Readability.js on load AND on URL change (for SPAs)
+- Sends to background which stores in `chrome.storage.session` keyed by tabId
+- Sidebar reads from storage via `usePageContext()` — never reads DOM directly
+- Page context is ALWAYS injected into AI system prompt automatically — user never has to do anything
 
-### Permissions (manifest)
-- Request only what is needed: `activeTab`, `storage`, `sidePanel`, `scripting`, `declarativeNetRequest`, `declarativeNetRequestWithHostAccess`
-- `host_permissions`: `<all_urls>` required for page reading AND for declarativeNetRequest rules to strip headers on provider domains
+### TypeScript
+- Strict mode — no `any`, no untyped exports
+- Use `zod` for API response validation
 
-### File/Import Rules
-- Barrel exports (`index.ts`) are fine for `components/` and `lib/`
-- Do NOT barrel-export from `entrypoints/` — WXT treats those as distinct build targets
-- No circular imports
+### React
+- Functional components only
+- Tailwind only — no CSS modules, no inline styles
+- `zustand` for shared sidebar state
+- `useState` for local component state
+
+### AI Streaming
+- Always stream — never wait for full response
+- Show `▊` cursor while streaming
+- Handle 429 rate limit errors gracefully with user-friendly message
+- Timeout after 30 seconds
+
+### Do NOT add
+- `axios` — use native fetch
+- `moment`/`dayjs` — use `Intl`
+- `lodash` — use native JS
+- Any UI component library — Tailwind + custom components only
 
 ## Agent Workflow
-1. **Always read PLAN.md first** before starting any task to understand current phase and open tasks
-2. Use the `architect` subagent for any decision involving new file structure, new dependencies, or API design
-3. Use the `tester` subagent after each feature is implemented — do not skip tests
-4. Use the `reviewer` subagent before marking a task complete
-5. Use the `ui-specialist` subagent for any Tailwind/component work
-
-## Testing
-- Vitest for unit tests (`.test.ts` files alongside source)
-- Playwright for integration/e2e tests (`tests/e2e/`)
-- Test coverage target: 80% for `lib/` utilities, best-effort for React components
-- Run `bun run test` and fix all failures before marking a task done
+1. Read PLAN.md first — know which phase and task you're working on
+2. Check `.opencode/skills/` for relevant patterns before writing code
+3. Use @architect for structural decisions
+4. Use @tester after implementing features
+5. Use @reviewer before marking tasks done
+6. Use @swarm/planner for phases with parallel tasks (5, 7, 8)
 
 ## Commit Convention
 ```
@@ -158,17 +121,4 @@ feat: add YouTube transcript extraction
 fix: handle empty PDF pages in OCR fallback
 refactor: extract page content logic to lib/extractors/page.ts
 test: add unit tests for pdf parser
-chore: update wxt to 0.20.x
 ```
-
-## Dependencies to NOT add
-- Do NOT add `axios` — use native `fetch`
-- Do NOT add `moment` or `dayjs` — use `Intl.DateTimeFormat`
-- Do NOT add `lodash` — use native JS equivalents
-- Do NOT add any UI component library (MUI, Chakra, etc.) — Tailwind + shadcn/ui primitives only
-- Do NOT add server-side frameworks (Next.js, Express) — this is a pure client-side extension
-
-## When Stuck
-- Check `.opencode/skills/chrome-extension.md` for MV3 gotchas
-- Check `.opencode/skills/wxt-patterns.md` for WXT-specific patterns
-- Use the `architect` subagent to think through the design before writing code
