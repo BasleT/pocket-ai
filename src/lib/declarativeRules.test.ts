@@ -14,7 +14,9 @@ describe('buildEmbedRules', () => {
 
   it('creates deterministic rule IDs', () => {
     const rules = buildEmbedRules();
-    expect(rules.map((rule) => rule.id)).toEqual([1000, 1001, 1002, 1003, 1004]);
+    expect(rules.map((rule) => rule.id)).toEqual(
+      EMBED_PROVIDER_DOMAINS.map((_, index) => 1000 + index),
+    );
   });
 
   it('removes frame blocking headers from responses', () => {

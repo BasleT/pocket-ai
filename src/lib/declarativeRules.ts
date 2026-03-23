@@ -2,6 +2,7 @@ const EMBED_RULE_ID_START = 1000;
 
 export const EMBED_PROVIDER_DOMAINS = [
   'chat.openai.com',
+  'chatgpt.com',
   'claude.ai',
   'gemini.google.com',
   'grok.com',

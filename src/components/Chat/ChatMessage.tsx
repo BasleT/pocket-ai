@@ -12,8 +12,10 @@ export function ChatMessage({ message }: ChatMessageProps) {
   return (
     <article className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[88%] rounded-lg px-3 py-2 text-sm shadow-sm ${
-          isUser ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'
+        className={`max-w-[88%] rounded-xl px-3 py-2 text-sm shadow-sm ${
+          isUser
+            ? 'border border-cyan-500/30 bg-cyan-500/20 text-cyan-50'
+            : 'border border-slate-700 bg-slate-900 text-slate-100'
         }`}
       >
         <ReactMarkdown>{message.content || '...'}</ReactMarkdown>

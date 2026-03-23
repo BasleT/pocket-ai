@@ -38,6 +38,7 @@ import type { GetYouTubeContextResponse, YouTubeContextData } from '../../src/ty
 import { OCR_LANGUAGE_STORAGE_KEY, OCR_RESULT_STORAGE_KEY } from '../../src/types/ocr';
 
 type SidebarMode = 'embed' | 'ai';
+type WorkspacePane = 'chat' | 'context' | 'settings';
 
 type SessionState = {
   activeProviderId: ProviderId;
@@ -114,6 +115,8 @@ function App() {
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [ocrLanguage, setOcrLanguage] = useState<OcrLanguage>(DEFAULT_OCR_LANGUAGE);
   const [sendRequest, setSendRequest] = useState<{ id: string; text: string } | null>(null);
+  const [embedCopyStatus, setEmbedCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [workspacePane, setWorkspacePane] = useState<WorkspacePane>('chat');
   const [loadedFromSession, setLoadedFromSession] = useState(false);
 
   const openProviderIdSet = useMemo(() => new Set(openProviderIds), [openProviderIds]);
@@ -122,7 +125,10 @@ function App() {
     [embedProviderToggles],
   );
   const configuredProviders = useMemo<ApiProviderId[]>(() => {
-    const providers: ApiProviderId[] = ['groq'];
+    const providers: ApiProviderId[] = [];
+    if (apiKeyConfigured.groq || Boolean(import.meta.env.VITE_GROQ_API_KEY)) {
+      providers.push('groq');
+    }
     if (apiKeyConfigured.openai) {
       providers.push('openai');
     }
@@ -134,6 +140,7 @@ function App() {
     }
     return providers;
   }, [apiKeyConfigured]);
+  const hasAnyApiProviderConfigured = configuredProviders.length > 0;
   const availableModels = useMemo(
     () => getAvailableModelsByConfiguredProviders(configuredProviders),
     [configuredProviders],
@@ -197,7 +204,7 @@ function App() {
       setOcrLanguage(normalizeOcrLanguage(storedOcrLanguage));
 
       setApiKeyConfigured({
-        groq: Boolean(groqApiKey),
+        groq: Boolean(groqApiKey || import.meta.env.VITE_GROQ_API_KEY),
         openai: Boolean(openAiApiKey),
         anthropic: Boolean(anthropicApiKey),
         google: Boolean(googleApiKey),
@@ -317,6 +324,23 @@ function App() {
     }));
   };
 
+  const handleCopyEmbedPrompt = async () => {
+    try {
+      const response = (await chrome.runtime.sendMessage({ type: 'GET_PAGE_CONTENT' })) as GetPageContentResponse;
+      if (!response?.ok) {
+        setEmbedCopyStatus('error');
+        return;
+      }
+
+      await navigator.clipboard.writeText(buildPageSummarizePrompt(response.page));
+      setEmbedCopyStatus('copied');
+      window.setTimeout(() => setEmbedCopyStatus('idle'), 1800);
+    } catch {
+      setEmbedCopyStatus('error');
+      window.setTimeout(() => setEmbedCopyStatus('idle'), 1800);
+    }
+  };
+
   const loadPageContext = async () => {
     setIsContextLoading(true);
     setPageContextError(null);
@@ -367,6 +391,12 @@ function App() {
 
     void loadPageContext();
     void loadYouTubeContext();
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode === 'embed') {
+      setWorkspacePane('chat');
+    }
   }, [mode]);
 
   useEffect(() => {
@@ -424,6 +454,11 @@ function App() {
   }
 
   const contextSystemMessage = contextSections.length > 0 ? contextSections.join('\n\n---\n\n') : undefined;
+  const contextReadyCount =
+    (pageContext ? 1 : 0) +
+    (youtubeContext?.hasTranscript ? 1 : 0) +
+    (parsedPdf ? 1 : 0) +
+    (ocrResult?.text ? 1 : 0);
 
   const handlePdfFileSelected = async (file: File) => {
     setIsPdfParsing(true);
@@ -445,19 +480,16 @@ function App() {
   };
 
   return (
-    <main
-      className={`${isDark ? 'dark' : ''} flex h-screen flex-col bg-gradient-to-b from-slate-50 to-slate-100 text-slate-900 dark:from-slate-950 dark:to-slate-900 dark:text-slate-100`}
-    >
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-3 py-2 dark:border-slate-700 dark:bg-slate-900/90">
-        <h1 className="text-sm font-semibold">Pocket AI</h1>
-        <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs dark:border-slate-700 dark:bg-slate-800">
+    <main className={`${isDark ? 'dark' : ''} ui-shell`}>
+      <header className="ui-header">
+        <div>
+          <h1 className="text-sm font-semibold">Pocket AI</h1>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">Sider-style workspace</p>
+        </div>
+        <div className="ui-mode-switch">
           <button
             type="button"
-            className={`rounded px-2 py-1 ${
-              mode === 'embed'
-                ? 'bg-white font-medium text-slate-900 shadow-sm dark:bg-slate-100'
-                : 'text-slate-600 dark:text-slate-300'
-            }`}
+            className={`ui-mode-btn ${mode === 'embed' ? 'ui-mode-btn-active' : ''}`}
             onClick={() => setMode('embed')}
             aria-label="Switch to embed mode"
           >
@@ -465,13 +497,16 @@ function App() {
           </button>
           <button
             type="button"
-            className={`rounded px-2 py-1 ${
-              mode === 'ai'
-                ? 'bg-white font-medium text-slate-900 shadow-sm dark:bg-slate-100'
-                : 'text-slate-600 dark:text-slate-300'
-            }`}
-            onClick={() => setMode('ai')}
+            className={`ui-mode-btn ${mode === 'ai' ? 'ui-mode-btn-active' : ''}`}
+            onClick={() => {
+              if (!hasAnyApiProviderConfigured) {
+                return;
+              }
+              setMode('ai');
+            }}
             aria-label="Switch to AI mode"
+            disabled={!hasAnyApiProviderConfigured}
+            title={!hasAnyApiProviderConfigured ? 'Configure an API key in Settings first' : undefined}
           >
             AI
           </button>
@@ -485,7 +520,23 @@ function App() {
             activeId={activeProviderId}
             onSelect={handleProviderSelect}
           />
-          <div className="relative min-h-0 flex-1">
+          <div className="ui-embed-hint">
+            <p>Embed mode uses your logged-in provider sites. Context tools are copy/paste.</p>
+            <button
+              type="button"
+              onClick={() => {
+                void handleCopyEmbedPrompt();
+              }}
+              className="ui-embed-hint-btn"
+            >
+              {embedCopyStatus === 'copied'
+                ? 'Copied'
+                : embedCopyStatus === 'error'
+                  ? 'Copy Failed'
+                  : 'Copy Page Prompt'}
+            </button>
+          </div>
+          <div className="relative min-h-0 flex-1 bg-slate-950">
             {enabledEmbedProviders.filter((provider) => openProviderIdSet.has(provider.id)).map((provider) => (
               <EmbedProvider
                 key={provider.id}
@@ -496,114 +547,159 @@ function App() {
           </div>
         </>
       ) : (
-        <section className="flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-            <ModelPicker value={selectedModelId} models={availableModels} onChange={setSelectedModelId} />
+        <section className="ui-workspace">
+          <aside className="ui-rail">
             <button
               type="button"
-              onClick={() => {
-                if (!pageContext) {
-                  return;
-                }
-
-                setQuickPromptDraft(buildPageSummarizePrompt(pageContext));
-              }}
-              disabled={!pageContext}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
-              aria-label="Summarize current page"
+              onClick={() => setWorkspacePane('chat')}
+              className={`ui-rail-btn ${workspacePane === 'chat' ? 'ui-rail-btn-active' : ''}`}
+              aria-label="Show chat workspace"
             >
-              Summarize this page
+              C
             </button>
+            <button
+              type="button"
+              onClick={() => setWorkspacePane('context')}
+              className={`ui-rail-btn ${workspacePane === 'context' ? 'ui-rail-btn-active' : ''}`}
+              aria-label="Show context workspace"
+            >
+              X
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkspacePane('settings')}
+              className={`ui-rail-btn ${workspacePane === 'settings' ? 'ui-rail-btn-active' : ''}`}
+              aria-label="Show settings workspace"
+            >
+              S
+            </button>
+          </aside>
+
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="ui-command-card">
+              <div className="flex items-center justify-between gap-2">
+                <ModelPicker value={selectedModelId} models={availableModels} onChange={setSelectedModelId} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!pageContext) {
+                      return;
+                    }
+
+                    setQuickPromptDraft(buildPageSummarizePrompt(pageContext));
+                  }}
+                  disabled={!pageContext}
+                  className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Summarize current page"
+                >
+                  Summarize page
+                </button>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
+                <span className="ui-stat-chip">Context ready: {contextReadyCount}</span>
+                <span className="ui-stat-chip">
+                  Provider keys: {configuredProviders.length}
+                </span>
+                {!hasAnyApiProviderConfigured ? (
+                  <span className="ui-stat-chip-warn">
+                    Add API key in Settings
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {workspacePane === 'settings' ? (
+              <div className="ui-settings-wrap">
+                <SettingsPanel
+                  embedProviderToggles={embedProviderToggles}
+                  apiKeyConfigured={apiKeyConfigured}
+                  connectionStatuses={connectionStatuses}
+                  themeMode={themeMode}
+                  onProviderToggle={handleEmbedProviderToggle}
+                  onThemeModeChange={setThemeMode}
+                  onSaveApiKey={handleSaveApiKey}
+                  onClearApiKey={handleClearApiKey}
+                  onTestConnection={handleTestConnection}
+                />
+              </div>
+            ) : null}
+
+            {workspacePane === 'context' ? (
+              <div className="mx-3 mt-3 space-y-2 overflow-y-auto">
+                {pageContext ? (
+                  <ContextBar title={pageContext.title} source={pageContext.source} warning={pageContext.warning} />
+                ) : null}
+
+                {isContextLoading ? (
+                  <div className="ui-soft-card">
+                    <Skeleton className="h-3 w-40" />
+                  </div>
+                ) : null}
+
+                {pageContextError ? (
+                  <div className="ui-warning">
+                    {pageContextError}
+                  </div>
+                ) : null}
+
+                {youtubeContext?.isYouTubePage ? (
+                  <YouTubeSummarizer
+                    context={youtubeContext}
+                    isLoading={isYouTubeLoading}
+                    onRefresh={() => {
+                      void loadYouTubeContext();
+                    }}
+                    onSummarize={(prompt) => {
+                      setQuickPromptDraft(prompt);
+                      setSendRequest({ id: crypto.randomUUID(), text: prompt });
+                      setWorkspacePane('chat');
+                    }}
+                  />
+                ) : null}
+
+                <OcrResultPanel
+                  result={ocrResult}
+                  selectedLanguage={ocrLanguage}
+                  onLanguageChange={setOcrLanguage}
+                />
+
+                <PdfUpload
+                  isParsing={isPdfParsing}
+                  progress={pdfProgress}
+                  pageCount={parsedPdf?.pageCount ?? null}
+                  onFileSelected={(file) => {
+                    void handlePdfFileSelected(file);
+                  }}
+                />
+
+                <PdfChat
+                  parsedPdf={parsedPdf}
+                  errorMessage={pdfError}
+                  onClear={() => {
+                    setParsedPdf(null);
+                    setPdfError(null);
+                    setPdfProgress(null);
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {workspacePane !== 'settings' ? (
+              <div className="ui-chat-wrap">
+                <ChatWindow
+                  modelId={selectedModelId}
+                  contextSystemMessage={contextSystemMessage}
+                  draftText={quickPromptDraft}
+                  onDraftTextChange={setQuickPromptDraft}
+                  sendRequest={sendRequest}
+                  onSendRequestHandled={(id) => {
+                    setSendRequest((previous) => (previous?.id === id ? null : previous));
+                    setQuickPromptDraft('');
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
-
-          {pageContext ? (
-            <ContextBar
-              title={pageContext.title}
-              source={pageContext.source}
-              warning={pageContext.warning}
-            />
-          ) : null}
-
-          {isContextLoading ? (
-            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-              <Skeleton className="h-3 w-40" />
-            </div>
-          ) : null}
-
-          {pageContextError ? (
-            <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              {pageContextError}
-            </div>
-          ) : null}
-
-          <SettingsPanel
-            embedProviderToggles={embedProviderToggles}
-            apiKeyConfigured={apiKeyConfigured}
-            connectionStatuses={connectionStatuses}
-            themeMode={themeMode}
-            onProviderToggle={handleEmbedProviderToggle}
-            onThemeModeChange={setThemeMode}
-            onSaveApiKey={handleSaveApiKey}
-            onClearApiKey={handleClearApiKey}
-            onTestConnection={handleTestConnection}
-          />
-
-          {youtubeContext?.isYouTubePage ? (
-            <YouTubeSummarizer
-              context={youtubeContext}
-              isLoading={isYouTubeLoading}
-              onRefresh={() => {
-                void loadYouTubeContext();
-              }}
-              onSummarize={(prompt) => {
-                setQuickPromptDraft(prompt);
-                setSendRequest({ id: crypto.randomUUID(), text: prompt });
-              }}
-            />
-          ) : null}
-
-          {isYouTubeLoading ? (
-            <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-              <Skeleton className="h-3 w-48" />
-            </div>
-          ) : null}
-
-          <OcrResultPanel
-            result={ocrResult}
-            selectedLanguage={ocrLanguage}
-            onLanguageChange={setOcrLanguage}
-          />
-
-          <PdfUpload
-            isParsing={isPdfParsing}
-            progress={pdfProgress}
-            pageCount={parsedPdf?.pageCount ?? null}
-            onFileSelected={(file) => {
-              void handlePdfFileSelected(file);
-            }}
-          />
-
-          <PdfChat
-            parsedPdf={parsedPdf}
-            errorMessage={pdfError}
-            onClear={() => {
-              setParsedPdf(null);
-              setPdfError(null);
-              setPdfProgress(null);
-            }}
-          />
-
-          <ChatWindow
-            modelId={selectedModelId}
-            contextSystemMessage={contextSystemMessage}
-            draftText={quickPromptDraft}
-            onDraftTextChange={setQuickPromptDraft}
-            sendRequest={sendRequest}
-            onSendRequestHandled={(id) => {
-              setSendRequest((previous) => (previous?.id === id ? null : previous));
-              setQuickPromptDraft('');
-            }}
-          />
         </section>
       )}
     </main>
