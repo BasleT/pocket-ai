@@ -80,38 +80,40 @@ export function Panel({
         {pageWarning ? <p className="mt-1 text-[11px] text-amber-600">{pageWarning}</p> : null}
       </header>
 
-      {activePanel === 'chat' ? (
-        <ChatPanel
-          pageContext={pageContext}
-          sendRequest={chatSendRequest}
-          onSendRequestHandled={onChatSendRequestHandled}
-          modelId={selectedModelId}
-        />
-      ) : activePanel === 'summarize' ? (
-        <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
-      ) : activePanel === 'youtube' ? (
-        <YouTubePanel onAskAboutVideo={onAskFollowUp} />
-      ) : activePanel === 'pdf' ? (
-        <PdfPanel onAskAboutPdf={onAskFollowUp} />
-      ) : activePanel === 'ocr' ? (
-        <OcrPanel onSendToChat={onAskFollowUp} />
-      ) : activePanel === 'settings' ? (
-        <SettingsPanel
-          selectedModelId={selectedModelId}
-          onModelChange={onModelChange}
-          themeMode={themeMode}
-          onThemeModeChange={onThemeModeChange}
-        />
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-sm text-slate-700">{content.title} panel skeleton is ready.</p>
-            <p className="mt-2 text-xs text-slate-500">
-              This panel will be implemented in its dedicated phase.
-            </p>
+      <div key={activePanel} className="panel-animate min-h-0 flex-1">
+        {activePanel === 'chat' ? (
+          <ChatPanel
+            pageContext={pageContext}
+            sendRequest={chatSendRequest}
+            onSendRequestHandled={onChatSendRequestHandled}
+            modelId={selectedModelId}
+          />
+        ) : activePanel === 'summarize' ? (
+          <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
+        ) : activePanel === 'youtube' ? (
+          <YouTubePanel onAskAboutVideo={onAskFollowUp} />
+        ) : activePanel === 'pdf' ? (
+          <PdfPanel onAskAboutPdf={onAskFollowUp} />
+        ) : activePanel === 'ocr' ? (
+          <OcrPanel onSendToChat={onAskFollowUp} />
+        ) : activePanel === 'settings' ? (
+          <SettingsPanel
+            selectedModelId={selectedModelId}
+            onModelChange={onModelChange}
+            themeMode={themeMode}
+            onThemeModeChange={onThemeModeChange}
+          />
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-sm text-slate-700">{content.title} panel skeleton is ready.</p>
+              <p className="mt-2 text-xs text-slate-500">
+                This panel will be implemented in its dedicated phase.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }

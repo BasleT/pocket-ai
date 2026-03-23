@@ -14,7 +14,37 @@
     @apply bg-white text-text antialiased;
   }
 
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+
   *:focus-visible {
     @apply outline-none ring-2 ring-accent/40 ring-offset-2 ring-offset-white;
+  }
+
+  .dark *:focus-visible {
+    @apply ring-offset-slate-950;
+  }
+}
+
+@layer components {
+  .panel-animate {
+    animation: panel-enter 180ms ease-out;
+  }
+
+  .skeleton-line {
+    @apply h-3 animate-pulse rounded bg-slate-200 dark:bg-slate-700;
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
