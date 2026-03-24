@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Shell } from '../../src/components/layout/Shell';
 import type { ActivePanel } from '../../src/components/layout/types';
@@ -40,6 +40,28 @@ function App() {
     : page?.title || 'No active page context';
 
   const pageWarning = error ?? page?.warning;
+
+  const consumePendingSelectionPrompt = useCallback(async () => {
+    const activeTabId = await getActiveTabId();
+    const keys = [GLOBAL_PENDING_SELECTION_PROMPT_KEY];
+    if (activeTabId) {
+      keys.unshift(createPendingSelectionPromptKey(activeTabId));
+    }
+
+    const stored = await chrome.storage.session.get(keys);
+    const pending =
+      (activeTabId
+        ? (stored[createPendingSelectionPromptKey(activeTabId)] as { action: string; text: string } | undefined)
+        : undefined) ??
+      (stored[GLOBAL_PENDING_SELECTION_PROMPT_KEY] as { action: string; text: string } | undefined);
+    if (!pending) {
+      return;
+    }
+
+    await chrome.storage.session.remove(keys);
+    setActivePanel('chat');
+    setChatSendRequest({ id: crypto.randomUUID(), text: `${pending.action} this: ${pending.text}` });
+  }, []);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -104,30 +126,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const consumePendingSelectionPrompt = async () => {
-      const activeTabId = await getActiveTabId();
-      const keys = [GLOBAL_PENDING_SELECTION_PROMPT_KEY];
-      if (activeTabId) {
-        keys.unshift(createPendingSelectionPromptKey(activeTabId));
-      }
+    void consumePendingSelectionPrompt();
 
-      const stored = await chrome.storage.session.get(keys);
-      const pending =
-        (activeTabId
-          ? (stored[createPendingSelectionPromptKey(activeTabId)] as { action: string; text: string } | undefined)
-          : undefined) ??
-        (stored[GLOBAL_PENDING_SELECTION_PROMPT_KEY] as { action: string; text: string } | undefined);
-      if (!pending) {
+    const onStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string,
+    ) => {
+      if (areaName !== 'session') {
         return;
       }
 
-      await chrome.storage.session.remove(keys);
-      setActivePanel('chat');
-      setChatSendRequest({ id: crypto.randomUUID(), text: `${pending.action} this: ${pending.text}` });
+      if (!changes[GLOBAL_PENDING_SELECTION_PROMPT_KEY]) {
+        return;
+      }
+
+      void consumePendingSelectionPrompt();
     };
 
-    void consumePendingSelectionPrompt();
-  }, []);
+    chrome.storage.onChanged.addListener(onStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(onStorageChange);
+    };
+  }, [consumePendingSelectionPrompt]);
 
   useEffect(() => {
     void storageSet('local', MODEL_STORAGE_KEY, selectedModelId);

@@ -122,7 +122,7 @@ export function Panel({
         ) : activePanel === 'summarize' ? (
           <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
         ) : activePanel === 'youtube' ? (
-          <YouTubePanel onAskAboutVideo={onAskFollowUp} />
+          <YouTubePanel activePageUrl={pageContext?.url ?? ''} onAskAboutVideo={onAskFollowUp} />
         ) : activePanel === 'pdf' ? (
           <PdfPanel onAskAboutPdf={onAskFollowUp} />
         ) : activePanel === 'ocr' ? (

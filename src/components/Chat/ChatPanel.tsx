@@ -79,10 +79,13 @@ export function ChatPanel({
   const [chatError, setChatError] = useState<string | null>(null);
   const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null);
   const [showPageChangeToast, setShowPageChangeToast] = useState(false);
+  const [isPortReady, setIsPortReady] = useState(false);
+  const [queuedPrompt, setQueuedPrompt] = useState<string | null>(null);
   const activeRequestIdRef = useRef<string | null>(null);
   const activeTabIdRef = useRef<number | null>(null);
   const streamPortRef = useRef<chrome.runtime.Port | null>(null);
   const lastPageUrlRef = useRef<string | null>(null);
+  const streamWatchdogRef = useRef<number | null>(null);
 
   const quickActions = useMemo(
     () => ['Summarize this page', 'What is this about?', 'Key takeaways'],
@@ -105,6 +108,23 @@ export function ChatPanel({
   useEffect(() => {
     const port = chrome.runtime.connect({ name: STREAM_PORT_NAME });
     streamPortRef.current = port;
+    setIsPortReady(true);
+
+    const clearWatchdog = () => {
+      if (streamWatchdogRef.current) {
+        window.clearTimeout(streamWatchdogRef.current);
+        streamWatchdogRef.current = null;
+      }
+    };
+
+    const armWatchdog = () => {
+      clearWatchdog();
+      streamWatchdogRef.current = window.setTimeout(() => {
+        setIsStreaming(false);
+        setChatError('Streaming timed out. You can retry or stop and resend.');
+        activeRequestIdRef.current = null;
+      }, 35_000);
+    };
 
     const onPortMessage = (message: ChatPortResponse) => {
       const requestId = activeRequestIdRef.current;
@@ -114,6 +134,7 @@ export function ChatPanel({
 
       if (message.type === 'CHAT_STREAM_CHUNK') {
         const typed = message as ChatStreamChunkMessage;
+        armWatchdog();
         setMessages((previous) => {
           const next = [...previous];
           const last = next[next.length - 1];
@@ -137,6 +158,7 @@ export function ChatPanel({
         if (typed.requestId === requestId) {
           activeRequestIdRef.current = null;
           setIsStreaming(false);
+          clearWatchdog();
         }
         return;
       }
@@ -146,15 +168,27 @@ export function ChatPanel({
         setChatError(typed.message);
         activeRequestIdRef.current = null;
         setIsStreaming(false);
+        clearWatchdog();
       }
     };
 
     port.onMessage.addListener(onPortMessage);
+    port.onDisconnect.addListener(() => {
+      setIsPortReady(false);
+      clearWatchdog();
+      if (activeRequestIdRef.current) {
+        setChatError('Stream connection closed. You can retry the message.');
+        setIsStreaming(false);
+        activeRequestIdRef.current = null;
+      }
+    });
 
     return () => {
+      clearWatchdog();
       port.onMessage.removeListener(onPortMessage);
       port.disconnect();
       streamPortRef.current = null;
+      setIsPortReady(false);
     };
   }, []);
 
@@ -214,8 +248,11 @@ export function ChatPanel({
   const sendPrompt = (prompt: string) => {
     const port = streamPortRef.current;
     if (!port || isStreaming) {
+      setQueuedPrompt(prompt);
       return;
     }
+
+    setQueuedPrompt(null);
 
     const userMessage: LocalChatMessage = {
       id: crypto.randomUUID(),
@@ -230,6 +267,14 @@ export function ChatPanel({
     setIsStreaming(true);
     setChatError(null);
     activeRequestIdRef.current = requestId;
+    if (streamWatchdogRef.current) {
+      window.clearTimeout(streamWatchdogRef.current);
+    }
+    streamWatchdogRef.current = window.setTimeout(() => {
+      setIsStreaming(false);
+      setChatError('Streaming timed out. You can retry or stop and resend.');
+      activeRequestIdRef.current = null;
+    }, 35_000);
 
     const serializable =
       pageContext && pageContext.content
@@ -256,6 +301,34 @@ export function ChatPanel({
   const handleSend = (prompt: string) => {
     setLastFailedPrompt(prompt);
     sendPrompt(prompt);
+  };
+
+  useEffect(() => {
+    if (!queuedPrompt || !isPortReady || isStreaming) {
+      return;
+    }
+
+    sendPrompt(queuedPrompt);
+  }, [isPortReady, isStreaming, queuedPrompt]);
+
+  const handleStopStream = () => {
+    const requestId = activeRequestIdRef.current;
+    if (!requestId) {
+      return;
+    }
+
+    streamPortRef.current?.postMessage({
+      type: 'CHAT_STREAM_CANCEL',
+      requestId,
+    });
+
+    activeRequestIdRef.current = null;
+    setIsStreaming(false);
+    setChatError('Stopped generation.');
+    if (streamWatchdogRef.current) {
+      window.clearTimeout(streamWatchdogRef.current);
+      streamWatchdogRef.current = null;
+    }
   };
 
   useEffect(() => {
@@ -309,6 +382,16 @@ export function ChatPanel({
         <button type="button" className="ui-btn ui-btn-ghost ml-auto !py-1" onClick={() => void triggerPageReread()}>
           Re-read page
         </button>
+        {isStreaming ? (
+          <button
+            type="button"
+            className="ui-btn ui-btn-ghost !py-1"
+            onClick={handleStopStream}
+            aria-label="Stop thinking"
+          >
+            Stop thinking
+          </button>
+        ) : null}
       </div>
 
       {showPageChangeToast ? <div className="ui-page-toast mx-4">✨ New page</div> : null}

@@ -20,6 +20,24 @@ describe('extractYouTubeVideoIdFromUrl', () => {
   it('returns null for non-youtube urls', () => {
     expect(extractYouTubeVideoIdFromUrl('https://example.com/watch?v=123')).toBeNull();
   });
+
+  it('extracts video id from youtube live urls', () => {
+    expect(extractYouTubeVideoIdFromUrl('https://www.youtube.com/live/dQw4w9WgXcQ?feature=share')).toBe(
+      'dQw4w9WgXcQ',
+    );
+  });
+
+  it('extracts video id from youtube embed urls', () => {
+    expect(extractYouTubeVideoIdFromUrl('https://www.youtube.com/embed/dQw4w9WgXcQ')).toBe(
+      'dQw4w9WgXcQ',
+    );
+  });
+
+  it('extracts video id from music.youtube.com watch urls', () => {
+    expect(extractYouTubeVideoIdFromUrl('https://music.youtube.com/watch?v=dQw4w9WgXcQ')).toBe(
+      'dQw4w9WgXcQ',
+    );
+  });
 });
 
 describe('chunkTranscript', () => {

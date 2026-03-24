@@ -17,21 +17,32 @@ export function extractYouTubeVideoIdFromUrl(url: string): string | null {
     return null;
   }
 
-  const host = parsedUrl.hostname.replace(/^www\./, '');
+  const host = parsedUrl.hostname.toLowerCase();
+  const normalizedHost = host.replace(/^www\./, '');
+  const isYouTubeHost =
+    normalizedHost === 'youtube.com' ||
+    normalizedHost.endsWith('.youtube.com') ||
+    normalizedHost === 'youtube-nocookie.com' ||
+    normalizedHost.endsWith('.youtube-nocookie.com');
 
-  if (host === 'youtube.com' || host === 'm.youtube.com') {
+  if (isYouTubeHost) {
     if (parsedUrl.pathname === '/watch') {
       const videoId = parsedUrl.searchParams.get('v');
       return videoId && videoId.length > 0 ? videoId : null;
     }
 
-    if (parsedUrl.pathname.startsWith('/shorts/')) {
+    if (
+      parsedUrl.pathname.startsWith('/shorts/') ||
+      parsedUrl.pathname.startsWith('/live/') ||
+      parsedUrl.pathname.startsWith('/embed/') ||
+      parsedUrl.pathname.startsWith('/v/')
+    ) {
       const parts = parsedUrl.pathname.split('/').filter(Boolean);
       return parts[1] ?? null;
     }
   }
 
-  if (host === 'youtu.be') {
+  if (normalizedHost === 'youtu.be') {
     const parts = parsedUrl.pathname.split('/').filter(Boolean);
     return parts[0] ?? null;
   }

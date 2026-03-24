@@ -10,7 +10,12 @@ import {
   shouldExtractPageFromUrl,
 } from '../src/lib/pageContextStore';
 import { storageGetSecret } from '../src/lib/storage';
-import type { ChatPortResponse, ChatStreamStartMessage, SerializableModelMessage } from '../src/types/chat';
+import type {
+  ChatPortResponse,
+  ChatStreamCancelMessage,
+  ChatStreamStartMessage,
+  SerializableModelMessage,
+} from '../src/types/chat';
 import type { GetPageImagesResponse, OcrResult } from '../src/types/ocr';
 import type {
   GetPageContentMessage,
@@ -214,8 +219,11 @@ function postSafe(port: chrome.runtime.Port, message: ChatPortResponse): boolean
   }
 }
 
-async function handleChatStream(port: chrome.runtime.Port, message: ChatStreamStartMessage) {
-  const abortController = new AbortController();
+async function handleChatStream(
+  port: chrome.runtime.Port,
+  message: ChatStreamStartMessage,
+  abortController: AbortController,
+) {
   const timeout = setTimeout(() => abortController.abort(), 30_000);
 
   try {
@@ -780,12 +788,51 @@ export default defineBackground(() => {
       return;
     }
 
-    port.onMessage.addListener((rawMessage: ChatStreamStartMessage) => {
-      if (!rawMessage || rawMessage.type !== 'CHAT_STREAM_START') {
+    let activeRequestId: string | null = null;
+    let activeAbortController: AbortController | null = null;
+
+    const abortActiveStream = (requestId?: string) => {
+      if (!activeAbortController) {
         return;
       }
 
-      void handleChatStream(port, rawMessage);
+      if (requestId && activeRequestId && requestId !== activeRequestId) {
+        return;
+      }
+
+      activeAbortController.abort();
+      activeAbortController = null;
+      activeRequestId = null;
+    };
+
+    port.onDisconnect.addListener(() => {
+      abortActiveStream();
+    });
+
+    port.onMessage.addListener((rawMessage: ChatStreamStartMessage | ChatStreamCancelMessage) => {
+      if (!rawMessage) {
+        return;
+      }
+
+      if (rawMessage.type === 'CHAT_STREAM_CANCEL') {
+        abortActiveStream(rawMessage.requestId);
+        return;
+      }
+
+      if (rawMessage.type !== 'CHAT_STREAM_START') {
+        return;
+      }
+
+      abortActiveStream();
+      activeRequestId = rawMessage.requestId;
+      activeAbortController = new AbortController();
+
+      void handleChatStream(port, rawMessage, activeAbortController).finally(() => {
+        if (activeRequestId === rawMessage.requestId) {
+          activeRequestId = null;
+          activeAbortController = null;
+        }
+      });
     });
   });
 

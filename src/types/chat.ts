@@ -22,6 +22,11 @@ export type ChatStreamStartMessage = {
   messages: SerializableModelMessage[];
 };
 
+export type ChatStreamCancelMessage = {
+  type: 'CHAT_STREAM_CANCEL';
+  requestId?: string;
+};
+
 export type ChatStreamChunkMessage = {
   type: 'CHAT_STREAM_CHUNK';
   requestId: string;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { PlaySquare } from 'lucide-react';
 
@@ -20,10 +20,11 @@ function buildVideoPrompt(context: YouTubeContextData): string {
 }
 
 type YouTubePanelProps = {
+  activePageUrl: string;
   onAskAboutVideo: (text: string) => void;
 };
 
-export function YouTubePanel({ onAskAboutVideo }: YouTubePanelProps) {
+export function YouTubePanel({ activePageUrl, onAskAboutVideo }: YouTubePanelProps) {
   const [context, setContext] = useState<YouTubeContextData | null>(null);
   const [isContextLoading, setIsContextLoading] = useState(true);
   const [summary, setSummary] = useState('');
@@ -69,7 +70,7 @@ export function YouTubePanel({ onAskAboutVideo }: YouTubePanelProps) {
     };
   }, []);
 
-  const loadContext = async () => {
+  const loadContext = useCallback(async () => {
     setIsContextLoading(true);
     setError(null);
 
@@ -91,11 +92,25 @@ export function YouTubePanel({ onAskAboutVideo }: YouTubePanelProps) {
     } finally {
       setIsContextLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadContext();
-  }, []);
+  }, [activePageUrl, loadContext]);
+
+  useEffect(() => {
+    if (!context?.isYouTubePage || context.hasTranscript) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadContext();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [context?.hasTranscript, context?.isYouTubePage, loadContext]);
 
   const summarize = () => {
     if (!context?.hasTranscript || !streamPortRef.current || isSummarizing) {

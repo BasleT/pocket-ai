@@ -67,6 +67,32 @@ export default defineContentScript({
     const createActionPrompt = (action: 'Explain' | 'Summarize' | 'Translate' | 'Improve', text: string): string =>
       `${action} this: ${text}`;
 
+    const sendSelectionAction = (
+      action: 'Explain' | 'Summarize' | 'Translate' | 'Improve',
+      text: string,
+      attempt = 0,
+    ) => {
+      chrome.runtime.sendMessage({ type: 'SELECTION_ACTION', action, text }, (response) => {
+        if (response?.ok) {
+          return;
+        }
+
+        if (chrome.runtime.lastError || !response?.ok) {
+          if (attempt >= 2) {
+            console.warn('[pocket-ai] toolbar send failed after retries', {
+              action,
+              reason: chrome.runtime.lastError?.message ?? response?.message,
+            });
+            return;
+          }
+
+          window.setTimeout(() => {
+            sendSelectionAction(action, text, attempt + 1);
+          }, 200 * (attempt + 1));
+        }
+      });
+    };
+
     const debounce = <T extends (...args: never[]) => void>(fn: T, waitMs: number) => {
       let timeoutId: number | null = null;
 
@@ -134,7 +160,7 @@ export default defineContentScript({
           event.stopPropagation();
           const prompt = createActionPrompt(action, text);
           console.log('[pocket-ai] toolbar click:', action, text.slice(0, 60));
-          void chrome.runtime.sendMessage({ type: 'SELECTION_ACTION', action, text });
+          sendSelectionAction(action, text);
           suppressToolbarUntil = Date.now() + 1000;
           removeToolbar();
         };
