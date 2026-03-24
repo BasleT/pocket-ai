@@ -1,182 +1,484 @@
-# AI Browser Sidebar — Implementation Plan
+# pocket-ai — PLAN3.md (UI Fixes & Visual Polish)
 
-> **Status:** Phase 0 — Setup
-> **Stack:** WXT · React · TypeScript · Tailwind · Vercel AI SDK · Groq
-
----
-
-## Phase 0 — Project Scaffolding
-*Goal: Working extension that loads in Chrome with a visible sidebar*
-
-### Tasks
-- [ ] `P0-01` Scaffold WXT project: `bun create wxt@latest . --template react-ts`
-- [ ] `P0-02` Install core deps: `ai`, `@ai-sdk/groq`, `zod`, `zustand`, `tailwindcss`, `@mozilla/readability`, `pdfjs-dist`, `tesseract.js`, `youtube-transcript`
-- [ ] `P0-03` Configure `wxt.config.ts` — set manifest permissions: `activeTab`, `storage`, `sidePanel`, `scripting`, `declarativeNetRequest`, `declarativeNetRequestWithHostAccess`; `host_permissions: ["<all_urls>"]`
-- [ ] `P0-04` Create `sidepanel/` entrypoint — bare React app renders "Hello World"
-- [ ] `P0-05` Create `background.ts` service worker — registers side panel on `chrome.action.onClicked`
-- [ ] `P0-06` Verify extension loads in Chrome (`chrome://extensions` → Load unpacked → `dist/`)
-- [ ] `P0-07` Set up Tailwind + base styles in sidepanel
-- [ ] `P0-08` Set up Vitest + Playwright configs
-- [ ] `P0-09` Create `lib/storage.ts` — typed wrappers around `chrome.storage.local` / `chrome.storage.session`
-
-**Exit criteria:** Extension installs, sidebar opens on icon click, Tailwind styles render correctly.
+> Based on the current screenshot. Every issue below is visible right now.
+> Fix these in order. Do not skip ahead. Do not refactor components.
 
 ---
 
-## Phase 1 — Embedded Provider Tabs (your existing subscriptions)
-*Goal: ChatGPT, Claude, Gemini, Grok load inside the sidebar using your existing browser login — zero setup required*
+## CRITICAL — Layout Still Broken
 
-### Tasks
-- [ ] `P1-01` Create `lib/declarativeRules.ts` — builds `declarativeNetRequest` rules that strip `X-Frame-Options` and `Content-Security-Policy: frame-ancestors` response headers for provider domains (`chat.openai.com`, `claude.ai`, `gemini.google.com`, `grok.com`, `chat.deepseek.com`)
-- [ ] `P1-02` Register the rules in `background.ts` on install/startup via `chrome.declarativeNetRequest.updateDynamicRules()`
-- [ ] `P1-03` Create `components/providers/providerConfig.ts` — array of provider objects: `{ id, name, url, icon, color }`
-- [ ] `P1-04` Build `components/providers/EmbedProvider.tsx` — renders an `<iframe>` pointing to the provider URL, fills the sidebar height, handles load errors gracefully
-- [ ] `P1-05` Build `components/providers/EmbedProviderTab.tsx` — tab bar at the top of the sidebar with provider icons; clicking switches the active iframe
-- [ ] `P1-06` Persist which iframe tabs are "open" and which was last active in `chrome.storage.session` — so switching back resumes where you left off
-- [ ] `P1-07` Add toggle in sidebar header: **"Embed"** (iframe mode) vs **"AI"** (API mode) — this is the main mode switcher
-- [ ] `P1-08` Handle the case where a user isn't logged in to a provider — detect the login page URL and show a "Log in to [Provider]" button that opens a new tab
-- [ ] `P1-09` Unit tests for `lib/declarativeRules.ts` rule generation
+The input bar is at the bottom which is progress, but there's a massive empty void
+between the last message and the input bar. The message area is not filling the space.
+The layout chain fix from PLAN2 still needs to be applied correctly.
 
-**Exit criteria:** Click "ChatGPT" tab in sidebar → chat.openai.com loads and you can chat using your Plus subscription. Same for Claude and Gemini.
+**Panel.tsx line 147:**
+```tsx
+// MUST BE:
+<div key={activePanel} className="ui-panel-body panel-animate h-full">
+```
 
----
+**ChatPanel.tsx outer section MUST BE:**
+```tsx
+<section className="flex h-full min-h-0 flex-col overflow-hidden">
+```
 
-## Phase 2 — API Chat (free models + BYO key)
-*Goal: Working multi-model chat in the sidebar connected to Groq (free) with no setup*
+**ChatWindow.tsx outer div MUST BE:**
+```tsx
+<div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+```
 
-### Tasks
-- [ ] `P2-01` Create `lib/ai.ts` — initialize Vercel AI SDK with Groq provider; export `streamChat()` helper
-- [ ] `P2-02` Set up message routing: `content.ts` → `background.ts` → Groq API → stream back to sidepanel
-- [ ] `P2-03` Build `components/Chat/ChatMessage.tsx` — renders user/assistant messages with markdown (use `react-markdown`)
-- [ ] `P2-04` Build `components/Chat/ChatInput.tsx` — textarea with send button, keyboard shortcut (Ctrl+Enter)
-- [ ] `P2-05` Build `components/Chat/ChatWindow.tsx` — scrollable message list, auto-scroll to bottom
-- [ ] `P2-06` Build `components/Toolbar/ModelPicker.tsx` — dropdown to select model (Groq: `llama-3.3-70b-versatile`, `mixtral-8x7b-32768`, `gemma2-9b-it`)
-- [ ] `P2-07` Add streaming token display — tokens appear one-by-one as they arrive
-- [ ] `P2-08` Add error handling UI — failed stream shows retry button
-- [ ] `P2-09` Persist chat history to `chrome.storage.session`
-- [ ] `P2-10` Add "Clear chat" button
-- [ ] `P2-11` Unit tests for `lib/ai.ts` streaming logic (mock Groq)
-
-**Exit criteria:** Can have a full streaming AI conversation using Groq free tier with no API key configured.
+When these are correct the messages fill from top, the empty void disappears,
+and the input stays pinned at the bottom with no gap.
 
 ---
 
-## Phase 3 — Page Context & Summarization
-*Goal: API mode sidebar can read the current page and answer questions about it*
+## VISUAL PROBLEMS — Exact Fixes
 
-### Tasks
-- [ ] `P3-01` Create `lib/extractors/page.ts` — inject Readability.js into page via content script, return cleaned article text
-- [ ] `P3-02` Add messaging: background listens for `GET_PAGE_CONTENT` message, calls page extractor, returns text
-- [ ] `P3-03` Build `components/Toolbar/ContextBar.tsx` — shows "📄 Reading: [page title]" when page context is loaded
-- [ ] `P3-04` Add "Summarize this page" quick action button — prepopulates a prompt with page content
-- [ ] `P3-05` Add text selection handler — when user selects text on page and opens sidebar, pre-inject selection as context
-- [ ] `P3-06` Handle pages where Readability fails (SPAs, login walls) — show graceful fallback message
-- [ ] `P3-07` Unit tests for `lib/extractors/page.ts`
+### Problem 1 — Header Is A Mess
 
-**Exit criteria:** "Summarize this page" works on any standard article/blog page in API mode.
+**What I see:** "POCKET AI" stacked on two lines, page title truncated badly, "Body text only"
+badge in orange floating awkwardly, "Docs" badge next to it, all crammed with no hierarchy.
 
----
+**Root cause:** The header `div` has `min-w-0 flex items-center gap-2` but there's too much
+content trying to fit in one line with no priority. The brand + title + multiple badges = chaos.
 
-## Phase 4 — YouTube Summarization
-*Goal: Detect YouTube pages, fetch transcript, allow Q&A on video content*
+**Fix in `Panel.tsx` header section:**
+```tsx
+<header className="ui-panel-header">
+  {/* Left: brand only, small and muted */}
+  <p className="ui-brand shrink-0">Pocket AI</p>
 
-### Tasks
-- [ ] `P4-01` Create `lib/extractors/youtube.ts` — use `youtube-transcript` package to fetch captions by video ID
-- [ ] `P4-02` Detect YouTube page in content script — extract video ID from URL
-- [ ] `P4-03` Build `components/Summarizer/YouTubeSummarizer.tsx` — auto-activates on youtube.com/watch pages
-- [ ] `P4-04` Add "Summarize video" button — sends transcript chunk to AI (handle long transcripts with chunking)
-- [ ] `P4-05` Handle videos with no transcript — show message "No captions available"
-- [ ] `P4-06` Unit tests for transcript extraction and chunking logic
+  {/* Right: title + single most important badge only */}
+  <div className="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-hidden pl-3">
+    <p
+      key={pageContext?.url ?? pageTitle}
+      className="ui-page-title page-title-animate min-w-0 truncate"
+    >
+      {pageTitle}
+    </p>
 
-**Exit criteria:** Opening a YouTube video and clicking "Summarize" returns a concise summary.
+    {/* Show extraction badge OR content type badge — not both */}
+    {pageContext?.source && pageContext.source !== 'readability' ? (
+      <ExtractionBadge source={pageContext.source} />
+    ) : pageContext?.content ? (
+      <span
+        key={`${pageContext.url}-${contentType}`}
+        className="ui-content-badge badge-animate shrink-0"
+        title={contentTypeMeta.label}
+      >
+        <span aria-hidden="true">{contentTypeMeta.emoji}</span>
+      </span>
+    ) : null}
+  </div>
+</header>
+```
 
----
-
-## Phase 5 — PDF Chat
-*Goal: User can upload a PDF and ask questions about it in the sidebar*
-
-### Tasks
-- [ ] `P5-01` Create `lib/extractors/pdf.ts` — use `pdfjs-dist` to extract text from all pages; handle both text-native and image PDFs
-- [ ] `P5-02` Build `components/PdfReader/PdfUpload.tsx` — drag-and-drop or file picker for `.pdf` files
-- [ ] `P5-03` Build `components/PdfReader/PdfChat.tsx` — chat interface with PDF text injected as system context
-- [ ] `P5-04` Add OCR fallback: if `pdfjs-dist` returns empty text, fall back to `tesseract.js` on rendered page images
-- [ ] `P5-05` Handle large PDFs: chunk text, summarize chunks, create rolling context window
-- [ ] `P5-06` Show page count and extraction progress bar during parsing
-- [ ] `P5-07` Unit tests for PDF parsing and chunking
-
-**Exit criteria:** Can upload a 20-page PDF and ask "what are the key points?" and get a useful answer.
-
----
-
-## Phase 6 — OCR (Image → Text)
-*Goal: User can click on any image on a page and extract its text*
-
-### Tasks
-- [ ] `P6-01` Create `lib/extractors/ocr.ts` — Tesseract.js worker, accepts image URL or blob
-- [ ] `P6-02` Add right-click context menu: "Extract text from image" (use `chrome.contextMenus`)
-- [ ] `P6-03` Show OCR result in sidebar with copy button
-- [ ] `P6-04` Add language selection for OCR (English default, show picker for others)
-- [ ] `P6-05` Unit tests for OCR module
-
-**Exit criteria:** Right-click any image on a webpage → "Extract text" → text appears in sidebar.
+Key changes:
+- Brand is `shrink-0` so it never wraps
+- Title takes remaining space with `flex-1 truncate`
+- Show EITHER extraction warning OR content type — never both at once
+- Content type badge shows only the emoji in the header (label is in the tooltip)
 
 ---
 
-## Phase 7 — Settings & API Key Management
-*Goal: User can configure their own API keys for other providers*
+### Problem 2 — "Chatting about:" Context Row Is Ugly
 
-### Tasks
-- [ ] `P7-01` Build `components/Settings/SettingsPanel.tsx` — tabbed settings UI
-- [ ] `P7-02` Embed provider toggles — enable/disable which providers show in the tab bar
-- [ ] `P7-03` API key inputs: Groq (default/free), OpenAI (optional), Anthropic (optional), Google AI Studio (optional)
-- [ ] `P7-04` Store keys encrypted in `chrome.storage.local` (use `AES-GCM` via Web Crypto API)
-- [ ] `P7-05` Update `lib/ai.ts` model router — picks provider based on stored keys, falls back to Groq
-- [ ] `P7-06` Build `components/Toolbar/ModelPicker.tsx` — dynamically show available models based on configured providers
-- [ ] `P7-07` Add "Test connection" button per API key — sends a trivial ping and shows ✅/❌
-- [ ] `P7-08` Unit tests for key storage encryption/decryption
+**What I see:** "Chatting about: Micropulse Synergy - Basle Trimmer" wraps to 3 lines,
+"Re-read page" and "Clear" buttons float next to it awkwardly. Looks like a form, not a UI.
 
-**Exit criteria:** User can enable/disable embed providers, configure API keys, and switch between free and paid models.
+**Fix in `ChatPanel.tsx` — replace the context row entirely:**
+```tsx
+<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2"
+     style={{ borderColor: 'var(--border)' }}>
+
+  {/* Truncated page context indicator */}
+  <span className="min-w-0 flex-1 truncate text-[11px]"
+        style={{ color: 'var(--text-muted)' }}>
+    {carryContext && previousPageContext
+      ? `${pageContext?.title ?? 'current page'} + ${previousPageContext.title}`
+      : pageContext?.title ?? 'No page context'}
+  </span>
+
+  {/* Actions — right aligned, compact */}
+  <div className="flex shrink-0 items-center gap-1">
+    {isStreaming && (
+      <button
+        type="button"
+        className="ui-btn ui-btn-ghost !px-2 !py-1 text-[11px]"
+        onClick={handleStopStream}
+      >
+        Stop
+      </button>
+    )}
+    <button
+      type="button"
+      className="ui-btn ui-btn-ghost !px-2 !py-1 text-[11px]"
+      onClick={() => void triggerPageReread()}
+      disabled={isRereading}
+    >
+      {isRereading ? '...' : 'Re-read'}
+    </button>
+    {messages.length > 0 && !isStreaming && (
+      <button
+        type="button"
+        className="ui-btn ui-btn-ghost !px-2 !py-1 text-[11px]"
+        onClick={handleClearConversation}
+      >
+        Clear
+      </button>
+    )}
+  </div>
+</div>
+```
+
+Key changes:
+- Single row, never wraps
+- Page title truncates cleanly with `truncate`
+- Buttons are compact `!px-2 !py-1` — small pill size
+- "Stop thinking" becomes just "Stop" to save space
+- All on one line always
 
 ---
 
-## Phase 8 — Polish & Cross-Browser
-*Goal: Ship-ready quality, Edge support*
+### Problem 3 — Error State Looks Like a Modal
 
-### Tasks
-- [ ] `P8-01` Add dark mode (auto-detect `prefers-color-scheme`, toggle in settings)
-- [ ] `P8-02` Add keyboard shortcuts — `Alt+Shift+S` to open/close sidebar
-- [ ] `P8-03` Add loading skeletons for all async operations
-- [ ] `P8-04` Test on Microsoft Edge (Chromium-based, declarativeNetRequest works the same)
-- [ ] `P8-05` Accessibility audit — ARIA labels, keyboard navigation throughout
-- [ ] `P8-06` Bundle size audit — keep extension zip under 5MB
-- [ ] `P8-07` Write README.md with install instructions and feature list
-- [ ] `P8-08` Prepare Chrome Web Store listing assets (screenshots, description)
+**What I see:** The "Streaming timed out" error has a heavy rounded border, large padding,
+looks like a dialog box dropped in the middle of the chat. Jarring.
 
-**Exit criteria:** Extension installable on Chrome and Edge, all phases working.
+**Fix in `ChatPanel.tsx` — make errors inline and subtle:**
+```tsx
+{chatError && (
+  <div className="mx-3 mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-xs"
+       style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <span style={{ color: '#f59e0b' }}>⚠</span>
+    <div className="flex-1 min-w-0">
+      <p style={{ color: 'var(--text-secondary)' }}>
+        {chatError.includes('timed out')
+          ? 'Response timed out.'
+          : chatError.includes('Rate limit') || chatError.includes('429')
+          ? 'Rate limit hit. Wait 30s and retry.'
+          : chatError.includes('API key') || chatError.includes('missing')
+          ? 'No API key. Open Settings to add one.'
+          : chatError}
+      </p>
+      <div className="mt-1.5 flex gap-2">
+        {lastFailedPrompt && (
+          <button
+            type="button"
+            onClick={() => sendPrompt(lastFailedPrompt)}
+            className="text-[11px] font-medium"
+            style={{ color: 'var(--accent)' }}
+          >
+            Retry →
+          </button>
+        )}
+        {(chatError.includes('API key') || chatError.includes('missing')) && (
+          <button
+            type="button"
+            onClick={onNavigateToSettings}
+            className="text-[11px] font-medium"
+            style={{ color: 'var(--accent)' }}
+          >
+            Settings →
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+```
 
 ---
 
-## Backlog (Post-MVP)
-These are nice-to-haves for after the core is working:
+### Problem 4 — User Message Bubble Alignment
 
-- **Prompt library** — save and reuse favorite prompts
-- **Chat history** — persist conversations across browser sessions
-- **Translation** — detect page language, offer to translate selection
-- **Grammar checker** — on selected text, apply grammar correction
-- **Group chat** — run the same prompt against multiple models simultaneously and display side-by-side
-- **Deep research mode** — multi-step web search + synthesis (requires search MCP)
-- **Wisebase / knowledge store** — save AI responses to a local searchable store
-- **Native desktop app** — Electron or Tauri wrapper using the same React codebase
+**What I see:** "What are common gotchas?" is a user message but it's centered on the screen
+instead of right-aligned. It looks like a chip/button, not a chat message.
+
+This is likely because `isThinking` or some state flag is incorrectly set, or the message
+hasn't been properly added to the `messages` array and is still being shown as a quick chip.
+
+**Check in `ChatPanel.tsx`:** When a quick action chip is clicked, it should call `handleSend`
+which adds it to `messages` as a `role: 'user'` message immediately. If it's still showing
+as a chip it means `messages.length === 0` is still true when it renders.
+
+The fix is to ensure `setMessages` is called synchronously before the stream starts.
+In `sendPrompt`:
+```typescript
+const sendPrompt = (prompt: string) => {
+  const userMessage: LocalChatMessage = {
+    id: crypto.randomUUID(),
+    role: 'user',
+    content: prompt,
+    timestamp: Date.now(),
+  };
+
+  // This MUST happen before the port check so message appears immediately
+  const conversation = [...messages, userMessage];
+  setMessages(conversation); // ← make sure this is here before any early returns
+
+  const port = streamPortRef.current;
+  if (!port || isStreaming) {
+    setQueuedPrompt(prompt);
+    return;
+  }
+  // ...rest of function
+};
+```
 
 ---
 
-## Known Risks & Mitigations
+### Problem 5 — Input Bar Spacing & Model Selector
 
-| Risk | Mitigation |
-|------|-----------|
-| Groq rate limits (free tier) | Show clear UI when rate-limited; prompt user to add their own key |
-| PDF.js bundle size (~3MB) | Lazy-load PDF worker only when user opens PDF feature |
-| Tesseract.js WASM size (~10MB) | Load only on demand; show download progress |
-| Chrome sidePanel API not on Firefox | WXT handles abstraction; fall back to popup on Firefox |
-| Long page content exceeds model context | Chunk and summarize in stages; always show what was included |
-| MV3 service worker termination | Heartbeat ping from sidepanel keeps worker alive during long operations |
+**What I see:** The input bar has "Model" label on the left, "Llama 3.3 70B ▼" on the right,
+then a full-width textarea below. The model selector row adds height and visual weight
+that fights the input area.
+
+**Fix — move model selector inline with the send button row:**
+```tsx
+// In ChatInput.tsx — restructure the layout:
+<div className="ui-input-bar">
+  <div className="flex items-end gap-2">
+    <textarea
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' && !e.shiftKey) || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) {
+          e.preventDefault();
+          submit();
+        }
+        if (e.key === 'Escape') setValue('');
+      }}
+      rows={2}
+      placeholder="Ask about this page..."
+      className="ui-input min-h-[42px] max-h-40 w-full resize-none"
+    />
+    {supportsVoice && (
+      <button type="button" onClick={toggleVoiceInput}
+              className={`ui-btn ui-btn-ghost h-10 w-10 shrink-0 !p-0 ${isListening ? 'mic-listening' : ''}`}>
+        {isListening ? <MicOff size={15} /> : <Mic size={15} />}
+      </button>
+    )}
+    <button
+      type="button"
+      onClick={submit}
+      disabled={isSending || !value.trim()}
+      className="ui-btn ui-btn-accent h-10 shrink-0"
+    >
+      Send
+    </button>
+  </div>
+
+  {/* Model selector — below textarea, subtle */}
+  <div className="mt-2 flex items-center justify-between px-1">
+    <select
+      value={modelId}
+      onChange={(e) => onModelChange(e.target.value as ChatModelId)}
+      className="cursor-pointer border-0 bg-transparent text-[11px] transition-colors"
+      style={{ color: 'var(--text-muted)' }}
+    >
+      {models.map((model) => (
+        <option key={model.id} value={model.id}>{model.name}</option>
+      ))}
+    </select>
+    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+      ↵ send · ⇧↵ newline
+    </span>
+  </div>
+</div>
+```
+
+Key changes:
+- Model selector moves BELOW the textarea, smaller text, no label
+- Keyboard hint on the right: "↵ send · ⇧↵ newline" — useful and looks pro
+- Input row is cleaner with just textarea + mic + send
+
+---
+
+### Problem 6 — Empty State When There Are Messages
+
+**What I see:** There's a large empty white void between the last message/error and the
+input bar. This is the ChatWindow not filling the flex space.
+
+This is the layout bug. Once the `h-full` chain is fixed this void disappears.
+The ChatWindow with `flex-1` will expand to fill the available space.
+
+---
+
+### Problem 7 — Quick Action Chips Spacing
+
+**What I see:** The chips wrap onto multiple lines with inconsistent spacing.
+
+**Fix in `index.css`:**
+```css
+/* Make chips slightly smaller and tighter */
+.ui-quick-chip {
+  @apply cursor-pointer rounded-full border px-2.5 py-1 text-[11px] transition-all duration-150;
+  border-color: var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  white-space: nowrap; /* ADD THIS — prevents chip text from wrapping */
+}
+```
+
+And in ChatPanel.tsx the chips container:
+```tsx
+<div className="flex flex-wrap gap-1.5 px-4 pb-3">
+  {quickActions.map((action) => (
+    <button key={action} type="button" onClick={() => handleSend(action)} className="ui-quick-chip">
+      {action}
+    </button>
+  ))}
+</div>
+```
+
+---
+
+### Problem 8 — Rail Icon Sizing
+
+**What I see:** The right rail icons look a bit large and the active state (purple square)
+is very boxy. The settings icon at the bottom right corner is slightly cut off.
+
+**Fix in `index.css`:**
+```css
+.ui-rail {
+  @apply flex h-full w-[48px] shrink-0 flex-col items-center px-[5px] py-2;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+}
+
+.ui-rail-btn {
+  @apply flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg;
+  color: var(--text-muted);
+  transition: all 150ms ease;
+}
+```
+
+Reduce width from 52px to 48px, buttons from 40px to 36px (h-9 w-9).
+This gives the main panel 4px more width which matters in a narrow sidebar.
+
+---
+
+### Problem 9 — Typography Hierarchy Is Flat
+
+Everything is the same visual weight. Nothing pops. The user message should feel
+like a message, not just text in a box.
+
+**Fix in `index.css`:**
+```css
+/* User messages — more contrast, clearly "sent" */
+.ui-message-user {
+  @apply rounded-2xl rounded-br-sm px-4 py-3 text-sm font-medium;
+  background: var(--accent);
+  color: #ffffff;
+  /* Remove border — solid accent color needs no border */
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+/* Assistant messages — slightly more padding, reading-optimized */
+.ui-message-assistant {
+  @apply rounded-2xl rounded-bl-sm border px-4 py-3 text-sm leading-relaxed;
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+/* Tighten up markdown output */
+.ui-message-assistant p { margin: 0 0 6px; line-height: 1.55; }
+.ui-message-assistant p:last-child { margin-bottom: 0; }
+.ui-message-assistant ul, .ui-message-assistant ol { padding-left: 16px; margin: 4px 0 6px; }
+.ui-message-assistant li { margin-bottom: 3px; line-height: 1.5; }
+.ui-message-assistant strong { color: var(--text-primary); font-weight: 600; }
+.ui-message-assistant code {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.8em;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+.ui-message-assistant pre {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.ui-message-assistant pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.82em;
+}
+.ui-message-assistant h1,
+.ui-message-assistant h2,
+.ui-message-assistant h3 {
+  font-weight: 600;
+  margin: 8px 0 4px;
+  color: var(--text-primary);
+}
+```
+
+---
+
+### Problem 10 — Overall Spacing Is Inconsistent
+
+Looking at the screenshot the padding jumps around — some sections have px-4, some px-3,
+the error has different padding than the messages. Standardize everything to a 12px/16px grid.
+
+**In `index.css` add spacing standards as comments for reference:**
+```css
+/* SPACING SYSTEM:
+   - Panel horizontal padding: 16px (px-4)
+   - Compact rows (context bar, error): 12px (px-3)
+   - Vertical section gaps: 8px (py-2) or 12px (py-3)
+   - Input bar padding: 12px (p-3)
+   - Message bubble padding: 12px horizontal 10px vertical (px-3 py-2.5)
+*/
+
+/* Tighten message bubble padding to match the spacing system */
+.ui-message-user,
+.ui-message-assistant {
+  @apply px-3 py-2.5; /* was px-4 py-3 — slightly tighter */
+}
+```
+
+---
+
+## Summary of Files to Change
+
+| Problem | File | Change |
+|---|---|---|
+| Layout void | `src/components/layout/Panel.tsx` | Add `h-full` to ui-panel-body div |
+| Layout void | `src/components/Chat/ChatPanel.tsx` | Add `h-full` to outer section |
+| Layout void | `src/components/Chat/ChatWindow.tsx` | Verify `flex-1 min-h-0 overflow-y-auto` |
+| Header chaos | `src/components/layout/Panel.tsx` | Rewrite header JSX |
+| Context row wrapping | `src/components/Chat/ChatPanel.tsx` | Rewrite context row JSX |
+| Error state looks modal | `src/components/Chat/ChatPanel.tsx` | Rewrite error JSX |
+| User message centering | `src/components/Chat/ChatPanel.tsx` | Fix sendPrompt message order |
+| Input bar layout | `src/components/Chat/ChatInput.tsx` | Move model selector below textarea |
+| Chip wrapping | `entrypoints/sidepanel/index.css` | Add white-space: nowrap to ui-quick-chip |
+| Chip spacing | `src/components/Chat/ChatPanel.tsx` | Tighten container gap |
+| Rail icon sizing | `entrypoints/sidepanel/index.css` | 48px rail, 36px buttons |
+| Typography | `entrypoints/sidepanel/index.css` | Message styles + markdown styles |
+| Spacing consistency | `entrypoints/sidepanel/index.css` | Padding standardization |
+
+---
+
+## What Good Looks Like After These Fixes
+
+1. Panel fills full height — no void, no collapse
+2. Header: "POCKET AI" · truncated page title · single badge — clean single line
+3. Context row: truncated title + Re-read + Clear — one compact line, never wraps
+4. Error: small inline warning, "Retry →" text link, not a modal card
+5. Messages: right-aligned purple user bubbles with shadow, left-aligned elevated assistant
+6. Input: textarea + mic + send, model selector below as tiny muted text
+7. Chips: single row where possible, no text wrap inside chips
+8. Code blocks in responses: dark surface, monospace font, proper border radius
+9. Rail: slightly narrower, icons not cut off
+
+---
+
+*PLAN3.md — March 2026*
+*Do PLAN3 first. Then go back to PLAN2 Phase 2+ for features.*

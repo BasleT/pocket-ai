@@ -23,6 +23,34 @@ function normalizeText(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim();
 }
 
+const BOILERPLATE_LINE_PATTERNS: RegExp[] = [
+  /__VIEWSTATE/i,
+  /__EVENTTARGET/i,
+  /__EVENTARGUMENT/i,
+  /__AntiXsrf/i,
+  /^function\s+__doPostBack/i,
+  /Sys\.WebForms\.PageRequestManager/i,
+  /ScriptResource\.axd/i,
+  /WebResource\.axd/i,
+  /^\s*(var|function)\s+[A-Za-z_$][\w$]*\s*\(/,
+  /^\s*\$addHandler\(/,
+  /^\s*Sys[A-Za-z]+\(/,
+];
+
+function isBoilerplateLine(line: string): boolean {
+  return BOILERPLATE_LINE_PATTERNS.some((pattern) => pattern.test(line));
+}
+
+export function stripExtractionBoilerplate(value: string): string {
+  const filteredLines = value
+    .split(/\r?\n/g)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !isBoilerplateLine(line));
+
+  return normalizeText(filteredLines.join(' '));
+}
+
 function truncateText(value: string, maxLength = MAX_CONTEXT_CHARS): string {
   if (value.length <= maxLength) {
     return value;
@@ -37,7 +65,7 @@ export function buildPageContent(input: BuildPageContentInput): PageContentResul
   const readableExcerpt = normalizeText(input.readability?.excerpt);
 
   const fallbackTitle = normalizeText(input.fallbackTitle) || 'Untitled page';
-  const fallbackText = normalizeText(input.fallbackText);
+  const fallbackText = stripExtractionBoilerplate(input.fallbackText);
 
   const hasReadableContent = readableText.length > 120;
 

@@ -3,6 +3,11 @@ import { useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
 
 import { CHAT_MODELS } from '../../lib/ai';
+import {
+  type FeatureToggleId,
+  type FeatureToggles,
+  isToggleLockedByPrivateMode,
+} from '../../lib/featureToggles';
 import { storageGetSecret, storageRemoveSecret, storageSet, storageSetSecret } from '../../lib/storage';
 import type { ChatModelId } from '../../types/chat';
 import {
@@ -20,9 +25,54 @@ type SettingsPanelProps = {
   onModelChange: (modelId: ChatModelId) => void;
   themeMode: ThemeMode;
   onThemeModeChange: (theme: ThemeMode) => void;
-  carryContext: boolean;
-  onCarryContextChange: (enabled: boolean) => void;
+  privateMode: boolean;
+  featureToggles: FeatureToggles;
+  effectiveFeatureToggles: FeatureToggles;
+  onPrivateModeChange: (enabled: boolean) => void;
+  onFeatureToggleChange: (toggleId: FeatureToggleId, enabled: boolean) => void;
 };
+
+type ToggleDescriptor = {
+  id: FeatureToggleId;
+  label: string;
+  description: string;
+};
+
+const PANEL_TOGGLES: ToggleDescriptor[] = [
+  { id: 'chatPanel', label: 'Chat panel', description: 'Show or hide Chat in the sidebar rail.' },
+  { id: 'summarizePanel', label: 'Summarize panel', description: 'Show or hide Summarize panel.' },
+  { id: 'youtubePanel', label: 'YouTube panel', description: 'Show or hide YouTube panel.' },
+  { id: 'pdfPanel', label: 'PDF panel', description: 'Show or hide PDF panel.' },
+  { id: 'ocrPanel', label: 'OCR panel', description: 'Show or hide OCR panel.' },
+];
+
+const BEHAVIOR_TOGGLES: ToggleDescriptor[] = [
+  {
+    id: 'selectionToolbar',
+    label: 'Text selection toolbar',
+    description: 'Enable highlight actions (Explain/Summarize/Translate/Improve).',
+  },
+  {
+    id: 'pageContextAutoRead',
+    label: 'Auto-read page content',
+    description: 'Automatically extract page context in the background.',
+  },
+  {
+    id: 'youtubeAutoFetch',
+    label: 'YouTube auto-fetch',
+    description: 'Automatically fetch YouTube transcript context.',
+  },
+  {
+    id: 'ocrScreenshotFallback',
+    label: 'OCR screenshot fallback',
+    description: 'Use screenshot OCR when text extraction is too short.',
+  },
+  {
+    id: 'carryContext',
+    label: 'Carry context between tabs',
+    description: 'Include previous page context in chat prompts.',
+  },
+];
 
 const PROVIDERS: ApiProviderId[] = ['groq', 'openai', 'anthropic', 'google'];
 
@@ -31,8 +81,11 @@ export function SettingsPanel({
   onModelChange,
   themeMode,
   onThemeModeChange,
-  carryContext,
-  onCarryContextChange,
+  privateMode,
+  featureToggles,
+  effectiveFeatureToggles,
+  onPrivateModeChange,
+  onFeatureToggleChange,
 }: SettingsPanelProps) {
   const [apiConfigured, setApiConfigured] = useState<Record<ApiProviderId, boolean>>({
     groq: false,
@@ -143,17 +196,80 @@ export function SettingsPanel({
         </div>
 
         <div className="mt-3">
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            Carry context between tabs
+          <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Privacy
+          </p>
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+            Private mode hard-locks sensitive auto-collection features.
           </p>
           <button
             type="button"
-            onClick={() => onCarryContextChange(!carryContext)}
+            onClick={() => onPrivateModeChange(!privateMode)}
             className="ui-btn ui-btn-ghost mt-2"
           >
-            {carryContext ? 'Enabled' : 'Disabled'}
+            {privateMode ? 'Private Mode: On' : 'Private Mode: Off'}
           </button>
         </div>
+
+        <div className="mt-3">
+          <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Panel visibility
+          </p>
+          <div className="mt-2 space-y-2">
+            {PANEL_TOGGLES.map((toggle) => (
+              <div key={toggle.id} className="rounded border px-2 py-2" style={{ borderColor: 'var(--border)' }}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs" style={{ color: 'var(--text-primary)' }}>
+                    {toggle.label}
+                  </p>
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-ghost !py-1"
+                    onClick={() => onFeatureToggleChange(toggle.id, !featureToggles[toggle.id])}
+                  >
+                    {featureToggles[toggle.id] ? 'On' : 'Off'}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                  {toggle.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Behavior controls
+          </p>
+          <div className="mt-2 space-y-2">
+            {BEHAVIOR_TOGGLES.map((toggle) => {
+              const isLocked = isToggleLockedByPrivateMode(toggle.id, privateMode);
+              return (
+                <div key={toggle.id} className="rounded border px-2 py-2" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs" style={{ color: 'var(--text-primary)' }}>
+                      {toggle.label}
+                    </p>
+                    <button
+                      type="button"
+                      className="ui-btn ui-btn-ghost !py-1"
+                      onClick={() => onFeatureToggleChange(toggle.id, !featureToggles[toggle.id])}
+                      disabled={isLocked}
+                    >
+                      {effectiveFeatureToggles[toggle.id] ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                    {toggle.description}
+                    {isLocked ? ' Locked by Private Mode.' : ''}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
       </div>
 
       <div className="mt-3 space-y-2">

@@ -114,30 +114,23 @@ export function ChatInput({ isSending, onSend, modelId, models, onModelChange }:
 
   return (
     <div className="ui-input-bar">
-      <div className="mb-2 flex items-center justify-between">
-        <label htmlFor="chat-model" className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Model
-        </label>
-        <select
-          id="chat-model"
-          value={modelId}
-          onChange={(event) => onModelChange(event.target.value as ChatModelId)}
-          className="cursor-pointer border-0 bg-transparent text-xs transition-colors"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          {models.map((model) => (
-            <option key={model.id} value={model.id}>
-              {model.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <div className="flex items-end gap-2">
         <textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              setValue('');
+              setInterimTranscript('');
+              return;
+            }
+
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              submit();
+              return;
+            }
+
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
               submit();
@@ -168,6 +161,25 @@ export function ChatInput({ isSending, onSend, modelId, models, onModelChange }:
         >
           Send
         </button>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between px-1">
+        <select
+          id="chat-model"
+          value={modelId}
+          onChange={(event) => onModelChange(event.target.value as ChatModelId)}
+          className="cursor-pointer border-0 bg-transparent text-[11px] transition-colors"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          {models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.name}
+            </option>
+          ))}
+        </select>
+        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+          ↵ send · ⇧↵ newline
+        </span>
       </div>
     </div>
   );

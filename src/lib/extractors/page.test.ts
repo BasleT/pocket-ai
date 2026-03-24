@@ -56,6 +56,30 @@ describe('buildPageContent', () => {
 
     expect(result.selection).toBe('Selected phrase');
   });
+
+  it('filters WebForms script boilerplate from fallback extraction', () => {
+    const fallbackText = `
+      __VIEWSTATE long-hidden-token
+      function __doPostBack(eventTarget, eventArgument) { theForm.submit(); }
+      Sys.WebForms.PageRequestManager._initialize('ScriptManager1', 'frmMain', [], [], [], 90, '');
+      Your Employee ID 3350
+      Please give a brief description of the problem Reset dashboard widget ordering
+      Status Open
+    `;
+
+    const result = buildPageContent({
+      readability: null,
+      fallbackTitle: 'IT Request',
+      fallbackText,
+      url: 'https://example.com/request',
+      selectionText: '',
+    });
+
+    expect(result.content).toContain('Your Employee ID 3350');
+    expect(result.content).toContain('Reset dashboard widget ordering');
+    expect(result.content).not.toContain('__VIEWSTATE');
+    expect(result.content).not.toContain('__doPostBack');
+  });
 });
 
 describe('buildPageSummarizePrompt', () => {

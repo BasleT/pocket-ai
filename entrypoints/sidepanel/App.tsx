@@ -3,6 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Shell } from '../../src/components/layout/Shell';
 import type { ActivePanel } from '../../src/components/layout/types';
 import { CHAT_MODELS } from '../../src/lib/ai';
+import {
+  FEATURE_TOGGLES_STORAGE_KEY,
+  PRIVATE_MODE_STORAGE_KEY,
+  getEffectiveFeatureToggles,
+  normalizeFeatureToggles,
+  type FeatureToggleId,
+  type FeatureToggles,
+} from '../../src/lib/featureToggles';
 import { usePageContext } from '../../src/lib/pageContext';
 import { storageGet, storageSet } from '../../src/lib/storage';
 import type { ChatModelId } from '../../src/types/chat';
@@ -11,7 +19,6 @@ import type { ThemeMode } from '../../src/types/settings';
 
 const MODEL_STORAGE_KEY = 'settings.modelId';
 const THEME_STORAGE_KEY = 'settings.themeMode';
-const CARRY_CONTEXT_STORAGE_KEY = 'carryContext';
 const PENDING_SELECTION_PROMPT_PREFIX = 'chat:pendingSelectionPrompt:';
 const GLOBAL_PENDING_SELECTION_PROMPT_KEY = 'chat:pendingSelectionPrompt';
 
@@ -31,9 +38,11 @@ function App() {
   const [chatSendRequest, setChatSendRequest] = useState<{ id: string; text: string } | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<ChatModelId>(DEFAULT_MODEL_ID);
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
-  const [carryContext, setCarryContext] = useState(false);
+  const [privateMode, setPrivateMode] = useState(false);
+  const [featureToggles, setFeatureToggles] = useState<FeatureToggles>(normalizeFeatureToggles(undefined));
   const [previousPageContext, setPreviousPageContext] = useState<PageContentResult | null>(null);
   const { page, previousPage, loading, error } = usePageContext();
+  const effectiveToggles = getEffectiveFeatureToggles(featureToggles, privateMode);
 
   const pageTitle = loading
     ? 'Loading page context...'
@@ -65,10 +74,12 @@ function App() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      const [storedModel, storedTheme, storedCarryContext] = await Promise.all([
+      const [storedModel, storedTheme, storedPrivateMode, storedFeatureToggles, legacyCarryContext] = await Promise.all([
         storageGet<string>('local', MODEL_STORAGE_KEY),
         storageGet<ThemeMode>('local', THEME_STORAGE_KEY),
-        storageGet<boolean>('local', CARRY_CONTEXT_STORAGE_KEY),
+        storageGet<boolean>('local', PRIVATE_MODE_STORAGE_KEY),
+        storageGet<Partial<FeatureToggles>>('local', FEATURE_TOGGLES_STORAGE_KEY),
+        storageGet<boolean>('local', 'carryContext'),
       ]);
 
       if (storedModel && CHAT_MODELS.some((model) => model.id === storedModel)) {
@@ -83,7 +94,18 @@ function App() {
         setThemeMode('dark');
       }
 
-      setCarryContext(Boolean(storedCarryContext));
+      const normalized = normalizeFeatureToggles(storedFeatureToggles);
+      if (typeof legacyCarryContext === 'boolean') {
+        normalized.carryContext = legacyCarryContext;
+      }
+
+      setPrivateMode(Boolean(storedPrivateMode));
+      setFeatureToggles(normalized);
+
+      await Promise.all([
+        storageSet('local', FEATURE_TOGGLES_STORAGE_KEY, normalized),
+        storageSet('local', PRIVATE_MODE_STORAGE_KEY, Boolean(storedPrivateMode)),
+      ]);
     };
 
     void loadSettings();
@@ -92,6 +114,30 @@ function App() {
   useEffect(() => {
     setPreviousPageContext(previousPage ?? null);
   }, [previousPage]);
+
+  useEffect(() => {
+    const onStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string,
+    ) => {
+      if (areaName !== 'local') {
+        return;
+      }
+
+      if (changes[PRIVATE_MODE_STORAGE_KEY]) {
+        setPrivateMode(Boolean(changes[PRIVATE_MODE_STORAGE_KEY].newValue));
+      }
+
+      if (changes[FEATURE_TOGGLES_STORAGE_KEY]) {
+        setFeatureToggles(normalizeFeatureToggles(changes[FEATURE_TOGGLES_STORAGE_KEY].newValue as Partial<FeatureToggles>));
+      }
+    };
+
+    chrome.storage.onChanged.addListener(onStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(onStorageChange);
+    };
+  }, []);
 
   useEffect(() => {
     const onRuntimeMessage = (message: unknown) => {
@@ -161,6 +207,28 @@ function App() {
     html.classList.toggle('light', !useDark);
   }, [themeMode]);
 
+  useEffect(() => {
+    const panelEnabledMap: Record<ActivePanel, boolean> = {
+      chat: effectiveToggles.chatPanel,
+      summarize: effectiveToggles.summarizePanel,
+      youtube: effectiveToggles.youtubePanel,
+      pdf: effectiveToggles.pdfPanel,
+      ocr: effectiveToggles.ocrPanel,
+      settings: true,
+    };
+
+    if (panelEnabledMap[activePanel]) {
+      return;
+    }
+
+    if (panelEnabledMap.chat) {
+      setActivePanel('chat');
+      return;
+    }
+
+    setActivePanel('settings');
+  }, [activePanel, effectiveToggles]);
+
   return (
     <Shell
       activePanel={activePanel}
@@ -179,18 +247,31 @@ function App() {
           text: `Use this summary as context and answer follow-up questions:\n\n${summary}`,
         });
       }}
+      onNavigateToSettings={() => {
+        setActivePanel('settings');
+      }}
       selectedModelId={selectedModelId}
       onModelChange={(modelId) => setSelectedModelId(modelId)}
       themeMode={themeMode}
-      carryContext={carryContext}
+      privateMode={privateMode}
+      featureToggles={featureToggles}
+      effectiveFeatureToggles={effectiveToggles}
+      carryContext={effectiveToggles.carryContext}
       previousPageContext={previousPageContext && previousPageContext.url !== page?.url ? previousPageContext : null}
       onThemeModeChange={(theme) => {
         setThemeMode(theme);
         void storageSet('local', THEME_STORAGE_KEY, theme);
       }}
-      onCarryContextChange={(next: boolean) => {
-        setCarryContext(next);
-        void storageSet('local', CARRY_CONTEXT_STORAGE_KEY, next);
+      onPrivateModeChange={(next: boolean) => {
+        setPrivateMode(next);
+        void storageSet('local', PRIVATE_MODE_STORAGE_KEY, next);
+      }}
+      onFeatureToggleChange={(toggleId: FeatureToggleId, enabled: boolean) => {
+        setFeatureToggles((previous) => {
+          const next = { ...previous, [toggleId]: enabled };
+          void storageSet('local', FEATURE_TOGGLES_STORAGE_KEY, next);
+          return next;
+        });
       }}
     />
   );

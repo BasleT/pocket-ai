@@ -8,6 +8,7 @@ export type LocalChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  timestamp: number;
 };
 
 export type SerializableModelMessage = {

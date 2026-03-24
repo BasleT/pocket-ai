@@ -21,10 +21,11 @@ function buildVideoPrompt(context: YouTubeContextData): string {
 
 type YouTubePanelProps = {
   activePageUrl: string;
+  enabled: boolean;
   onAskAboutVideo: (text: string) => void;
 };
 
-export function YouTubePanel({ activePageUrl, onAskAboutVideo }: YouTubePanelProps) {
+export function YouTubePanel({ activePageUrl, enabled, onAskAboutVideo }: YouTubePanelProps) {
   const [context, setContext] = useState<YouTubeContextData | null>(null);
   const [isContextLoading, setIsContextLoading] = useState(true);
   const [summary, setSummary] = useState('');
@@ -95,8 +96,25 @@ export function YouTubePanel({ activePageUrl, onAskAboutVideo }: YouTubePanelPro
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setContext(null);
+      setError(null);
+      setSummary('');
+      setIsContextLoading(false);
+      return;
+    }
+
     void loadContext();
-  }, [activePageUrl, loadContext]);
+  }, [activePageUrl, enabled, loadContext]);
+
+  if (!enabled) {
+    return (
+      <div className="ui-empty p-4">
+        <PlaySquare size={32} className="ui-muted" />
+        <p className="text-xs ui-subtle">YouTube feature is disabled in Settings.</p>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!context?.isYouTubePage || context.hasTranscript) {

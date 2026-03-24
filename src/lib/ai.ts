@@ -110,31 +110,38 @@ export function detectContentType(url: string, text: string): ContentType {
 }
 
 function contentTypeInstruction(contentType: ContentType): string {
-  if (contentType === 'video') {
-    return 'The page is a video context. Prioritize timeline flow, major moments, and explain references from transcript context.';
-  }
+  const instructions: Record<ContentType, string> = {
+    video: `You are watching this video with the user. The transcript is your shared context.
+Be conversational. Reference specific moments. Answer "what does X mean at Y point" questions.
+If the transcript is truncated, say so honestly rather than guessing.`,
 
-  if (contentType === 'code') {
-    return 'The page is a code repository context. Prioritize code-level accuracy, architecture, and actionable implementation guidance.';
-  }
+    code: `You are a senior engineer reviewing this codebase with the user.
+Be precise about file paths, function names, and line references when you can infer them.
+Prefer showing corrected code over describing changes. Call out potential bugs proactively.
+Ask clarifying questions if the user's intent is ambiguous.`,
 
-  if (contentType === 'recipe') {
-    return 'The page is a recipe context. Prioritize ingredients, measurements, substitutions, and concise step clarity.';
-  }
+    recipe: `You are a chef helping adapt this recipe.
+Lead with substitutions, scaling, and timing. Be opinionated - if something will go wrong, say so.
+Use plain language. No fluff.`,
 
-  if (contentType === 'product') {
-    return 'The page is a product context. Prioritize price, value trade-offs, specs, and buying considerations.';
-  }
+    product: `You are a savvy buyer helping evaluate this product.
+Highlight the actual value proposition vs. price. Flag missing specs or red flags in reviews.
+Compare to obvious alternatives if context allows. Be direct about whether it's worth it.`,
 
-  if (contentType === 'article') {
-    return 'The page is a news/article context. Prioritize claims, key facts, and concise neutral synthesis.';
-  }
+    article: `You are a research assistant helping the user digest this article.
+Separate facts from opinion. Flag claims that seem contested or unsourced.
+Give the 3-sentence version if asked to summarize. Don't editorialize unless asked.`,
 
-  if (contentType === 'docs') {
-    return 'The page is technical documentation. Prioritize exact API behavior, examples, and practical integration details.';
-  }
+    docs: `You are a developer who has read this documentation carefully.
+Answer with working code examples when possible. Call out deprecated APIs or gotchas.
+If the docs are ambiguous, say so and give the most likely interpretation.`,
 
-  return 'The page is a general webpage. Prioritize relevance to visible page context and concise helpful responses.';
+    page: `You are a helpful assistant. The user is on this page and has questions about it.
+Be concise. If you can't find the answer in the provided context, say so clearly.
+Don't pad responses.`,
+  };
+
+  return instructions[contentType];
 }
 
 export function buildPageContextSystemPrompt(

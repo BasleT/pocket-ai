@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { MessageSquareDashed } from 'lucide-react';
 
-import { buildPageContextSystemPrompt } from '../../lib/ai';
-import { CHAT_MODELS } from '../../lib/ai';
+import { CHAT_MODELS, buildPageContextSystemPrompt, detectContentType } from '../../lib/ai';
 import type {
   ChatModelId,
   ChatPortResponse,
@@ -23,6 +22,17 @@ const STREAM_PORT_NAME = 'ai-stream';
 type StoredChatState = {
   messages: LocalChatMessage[];
 };
+
+function normalizeStoredMessages(messages: LocalChatMessage[] | undefined): LocalChatMessage[] {
+  if (!messages || messages.length === 0) {
+    return [];
+  }
+
+  return messages.map((message) => ({
+    ...message,
+    timestamp: typeof message.timestamp === 'number' ? message.timestamp : Date.now(),
+  }));
+}
 
 async function getActiveTabId(): Promise<number | null> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -63,6 +73,7 @@ type ChatPanelProps = {
   onSendRequestHandled?: (id: string) => void;
   modelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
+  onNavigateToSettings: () => void;
 };
 
 export function ChatPanel({
@@ -73,11 +84,13 @@ export function ChatPanel({
   onSendRequestHandled,
   modelId,
   onModelChange,
+  onNavigateToSettings,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null);
+  const [isRereading, setIsRereading] = useState(false);
   const [showPageChangeToast, setShowPageChangeToast] = useState(false);
   const [isPortReady, setIsPortReady] = useState(false);
   const [queuedPrompt, setQueuedPrompt] = useState<string | null>(null);
@@ -87,14 +100,30 @@ export function ChatPanel({
   const lastPageUrlRef = useRef<string | null>(null);
   const streamWatchdogRef = useRef<number | null>(null);
 
-  const quickActions = useMemo(
-    () => ['Summarize this page', 'What is this about?', 'Key takeaways'],
-    [],
-  );
+  const quickActions = useMemo(() => {
+    if (!pageContext || pageContext.source === 'fallback' || pageContext.source === 'unsupported') {
+      return ['What can you help me with?', 'How do I use this extension?'];
+    }
+
+    const contentType = detectContentType(pageContext.url, pageContext.content);
+    const actionMap: Record<string, string[]> = {
+      video: ['Summarize this video', 'What are the key points?', 'Give me timestamps for main topics'],
+      code: ['Explain this codebase', 'What does this repo do?', 'Find potential bugs'],
+      recipe: ['List the ingredients', 'Can I substitute anything?', 'How long does this take?'],
+      product: ['Is this worth buying?', 'What are the main pros and cons?', 'Compare to alternatives'],
+      article: ['Summarize in 3 bullets', 'What claims are made?', "What's the author's bias?"],
+      docs: ['Give me a quick start', 'Show me a code example', 'What are common gotchas?'],
+      page: ['Summarize this page', 'What is this about?', 'Key takeaways'],
+    };
+
+    return actionMap[contentType] ?? actionMap.page;
+  }, [pageContext]);
 
   const triggerPageReread = async () => {
+    setIsRereading(true);
     const tabId = await getActiveTabId();
     if (!tabId) {
+      setIsRereading(false);
       return;
     }
 
@@ -102,6 +131,8 @@ export function ChatPanel({
       await chrome.tabs.sendMessage(tabId, { type: 'REQUEST_PAGE_CONTENT_SNAPSHOT' });
     } catch {
       // Ignore if content script is not reachable.
+    } finally {
+      setIsRereading(false);
     }
   };
 
@@ -140,7 +171,7 @@ export function ChatPanel({
           const last = next[next.length - 1];
 
           if (!last || last.role !== 'assistant' || last.id !== requestId) {
-            next.push({ id: requestId, role: 'assistant', content: typed.chunk });
+            next.push({ id: requestId, role: 'assistant', content: typed.chunk, timestamp: Date.now() });
             return next;
           }
 
@@ -205,7 +236,7 @@ export function ChatPanel({
       const key = createChatStorageKey(tabId);
       const stored = await chrome.storage.session.get(key);
       const state = stored[key] as StoredChatState | undefined;
-      setMessages(state?.messages ?? []);
+      setMessages(normalizeStoredMessages(state?.messages));
     };
 
     const onActivated = () => {
@@ -245,25 +276,8 @@ export function ChatPanel({
     };
   }, [isStreaming]);
 
-  const sendPrompt = (prompt: string) => {
-    const port = streamPortRef.current;
-    if (!port || isStreaming) {
-      setQueuedPrompt(prompt);
-      return;
-    }
-
-    setQueuedPrompt(null);
-
-    const userMessage: LocalChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: prompt,
-    };
-
+  const startStream = (conversation: LocalChatMessage[], port: chrome.runtime.Port) => {
     const requestId = crypto.randomUUID();
-    const conversation = [...messages, userMessage];
-
-    setMessages(conversation);
     setIsStreaming(true);
     setChatError(null);
     activeRequestIdRef.current = requestId;
@@ -298,6 +312,27 @@ export function ChatPanel({
     });
   };
 
+  const sendPrompt = (prompt: string) => {
+    const userMessage: LocalChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: prompt,
+      timestamp: Date.now(),
+    };
+
+    const conversation = [...messages, userMessage];
+    setMessages(conversation);
+
+    const port = streamPortRef.current;
+    if (!port || isStreaming) {
+      setQueuedPrompt(prompt);
+      return;
+    }
+
+    setQueuedPrompt(null);
+    startStream(conversation, port);
+  };
+
   const handleSend = (prompt: string) => {
     setLastFailedPrompt(prompt);
     sendPrompt(prompt);
@@ -308,28 +343,66 @@ export function ChatPanel({
       return;
     }
 
-    sendPrompt(queuedPrompt);
-  }, [isPortReady, isStreaming, queuedPrompt]);
-
-  const handleStopStream = () => {
-    const requestId = activeRequestIdRef.current;
-    if (!requestId) {
+    const port = streamPortRef.current;
+    if (!port) {
       return;
     }
 
-    streamPortRef.current?.postMessage({
-      type: 'CHAT_STREAM_CANCEL',
-      requestId,
-    });
+    setQueuedPrompt(null);
+    startStream(messages, port);
+  }, [isPortReady, isStreaming, messages, queuedPrompt]);
+
+  const handleStopStream = () => {
+    const requestId = activeRequestIdRef.current;
+
+    if (requestId && streamPortRef.current) {
+      streamPortRef.current.postMessage({
+        type: 'CHAT_STREAM_CANCEL',
+        requestId,
+      });
+    }
 
     activeRequestIdRef.current = null;
     setIsStreaming(false);
-    setChatError('Stopped generation.');
+    setChatError(null);
     if (streamWatchdogRef.current) {
       window.clearTimeout(streamWatchdogRef.current);
       streamWatchdogRef.current = null;
     }
   };
+
+  const handleClearConversation = () => {
+    setMessages([]);
+    setChatError(null);
+    setLastFailedPrompt(null);
+    setQueuedPrompt(null);
+    activeRequestIdRef.current = null;
+
+    if (streamWatchdogRef.current) {
+      window.clearTimeout(streamWatchdogRef.current);
+      streamWatchdogRef.current = null;
+    }
+
+    const tabId = activeTabIdRef.current;
+    if (tabId) {
+      void chrome.storage.session.remove(createChatStorageKey(tabId));
+    }
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+
+      setChatError(null);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     if (!sendRequest) {
@@ -367,38 +440,52 @@ export function ChatPanel({
   }, [pageContext?.url]);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col">
-      <div className="px-4 py-3 flex items-center gap-2">
-        <p className="ui-subtle text-xs">
+    <section className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        className="flex shrink-0 items-center gap-2 border-b px-3 py-2"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <span className="min-w-0 flex-1 truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
           {carryContext && previousPageContext
-            ? `🗒️ ${pageContext?.title ?? 'current page'} + ${previousPageContext.title}`
-            : `Chatting about: ${pageContext?.title ?? 'current page'}`}
-        </p>
-        {carryContext && previousPageContext ? (
-          <span className="ui-context-pill" title="Including previous tab context">
-            📎 Carrying context from: {previousPageContext.title}
-          </span>
-        ) : null}
-        <button type="button" className="ui-btn ui-btn-ghost ml-auto !py-1" onClick={() => void triggerPageReread()}>
-          Re-read page
-        </button>
-        {isStreaming ? (
+            ? `${pageContext?.title ?? 'current page'} + ${previousPageContext.title}`
+            : pageContext?.title ?? 'No page context'}
+        </span>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {isStreaming ? (
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost ui-btn-trace !px-2 !py-1 text-[11px]"
+              onClick={handleStopStream}
+            >
+              Stop
+            </button>
+          ) : null}
           <button
             type="button"
-            className="ui-btn ui-btn-ghost !py-1"
-            onClick={handleStopStream}
-            aria-label="Stop thinking"
+            className="ui-btn ui-btn-ghost !px-2 !py-1 text-[11px]"
+            onClick={() => void triggerPageReread()}
+            disabled={isRereading}
           >
-            Stop thinking
+            {isRereading ? '...' : 'Re-read'}
           </button>
-        ) : null}
+          {messages.length > 0 && !isStreaming ? (
+            <button
+              type="button"
+              className="ui-btn ui-btn-ghost !px-2 !py-1 text-[11px]"
+              onClick={handleClearConversation}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {showPageChangeToast ? <div className="ui-page-toast mx-4">✨ New page</div> : null}
 
       {messages.length === 0 ? (
-        <div className="px-4 pt-2">
-          <div className="mb-5 flex items-center justify-center">
+        <div className="pt-2">
+          <div className="mb-5 flex items-center justify-center px-4">
             <div className="ui-empty !min-h-0">
               <MessageSquareDashed size={32} className="ui-muted" />
               <p className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>
@@ -407,7 +494,7 @@ export function ChatPanel({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 px-4 pb-3">
             {quickActions.map((action) => (
               <button
                 key={action}
@@ -423,17 +510,44 @@ export function ChatPanel({
       ) : null}
 
       {chatError ? (
-        <div className="ui-overlay mx-3 mt-3 text-xs" style={{ color: 'var(--text-primary)' }}>
-          <p>{chatError}</p>
-          {lastFailedPrompt ? (
-            <button
-              type="button"
-              onClick={() => sendPrompt(lastFailedPrompt)}
-              className="ui-btn ui-btn-ghost mt-2"
-            >
-              Retry
-            </button>
-          ) : null}
+        <div
+          className="mx-3 mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-xs"
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+        >
+          <span style={{ color: '#f59e0b' }}>⚠</span>
+          <div className="min-w-0 flex-1">
+            <p style={{ color: 'var(--text-secondary)' }}>
+              {chatError.includes('timed out')
+                ? 'Response timed out.'
+                : chatError.includes('Rate limit') || chatError.includes('429')
+                  ? 'Rate limit hit. Wait 30s and retry.'
+                  : chatError.includes('API key') || chatError.includes('missing')
+                    ? 'No API key. Open Settings to add one.'
+                    : chatError}
+            </p>
+            <div className="mt-1.5 flex gap-2">
+              {lastFailedPrompt ? (
+                <button
+                  type="button"
+                  onClick={() => sendPrompt(lastFailedPrompt)}
+                  className="text-[11px] font-medium"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Retry →
+                </button>
+              ) : null}
+              {chatError.includes('API key') || chatError.includes('missing') ? (
+                <button
+                  type="button"
+                  onClick={onNavigateToSettings}
+                  className="text-[11px] font-medium"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Settings →
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : null}
 

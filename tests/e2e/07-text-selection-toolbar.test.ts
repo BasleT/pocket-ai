@@ -62,7 +62,7 @@ test('selection toolbar Explain action opens/sends to chat', async () => {
 
     expect(pageLogs.some((line) => line.includes('toolbar click: Explain'))).toBe(true);
     await expect(async () => {
-      await expect(panelPage.getByText(/Explain this:/i)).toBeVisible({ timeout: 5_000 });
+      await expect(panelPage.getByText(/Explain this:/i).first()).toBeVisible({ timeout: 5_000 });
     }).toPass({
       intervals: [100, 200, 500, 1000],
       timeout: 30_000,

@@ -3,6 +3,7 @@ import { FileSearch, FileText, MessageSquare, PlaySquare, Settings } from 'lucid
 import { IconRail } from './IconRail';
 import { Panel } from './Panel';
 import type { ActivePanel, RailItem } from './types';
+import type { FeatureToggleId, FeatureToggles } from '../../lib/featureToggles';
 import type { ChatModelId } from '../../types/chat';
 import type { PageContentResult } from '../../types/page';
 import type { ThemeMode } from '../../types/settings';
@@ -26,12 +27,17 @@ type ShellProps = {
   chatSendRequest?: { id: string; text: string } | null;
   onChatSendRequestHandled?: (id: string) => void;
   onAskFollowUp: (summary: string) => void;
+  onNavigateToSettings: () => void;
   selectedModelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
   themeMode: ThemeMode;
+  privateMode: boolean;
+  featureToggles: FeatureToggles;
+  effectiveFeatureToggles: FeatureToggles;
   carryContext: boolean;
   onThemeModeChange: (theme: ThemeMode) => void;
-  onCarryContextChange: (enabled: boolean) => void;
+  onPrivateModeChange: (enabled: boolean) => void;
+  onFeatureToggleChange: (toggleId: FeatureToggleId, enabled: boolean) => void;
 };
 
 export function Shell({
@@ -44,15 +50,48 @@ export function Shell({
   chatSendRequest,
   onChatSendRequestHandled,
   onAskFollowUp,
+  onNavigateToSettings,
   selectedModelId,
   onModelChange,
   themeMode,
+  privateMode,
+  featureToggles,
+  effectiveFeatureToggles,
   carryContext,
   onThemeModeChange,
-  onCarryContextChange,
+  onPrivateModeChange,
+  onFeatureToggleChange,
 }: ShellProps) {
+  const visibleRailItems = RAIL_ITEMS.filter((item) => {
+    if (item.id === 'settings') {
+      return true;
+    }
+
+    if (item.id === 'chat') {
+      return effectiveFeatureToggles.chatPanel;
+    }
+
+    if (item.id === 'summarize') {
+      return effectiveFeatureToggles.summarizePanel;
+    }
+
+    if (item.id === 'youtube') {
+      return effectiveFeatureToggles.youtubePanel;
+    }
+
+    if (item.id === 'pdf') {
+      return effectiveFeatureToggles.pdfPanel;
+    }
+
+    if (item.id === 'ocr') {
+      return effectiveFeatureToggles.ocrPanel;
+    }
+
+    return true;
+  });
+
   return (
-    <main className="ui-shell">
+    <main className="ui-shell h-full">
       <Panel
         activePanel={activePanel}
         pageTitle={pageTitle}
@@ -62,14 +101,19 @@ export function Shell({
         chatSendRequest={chatSendRequest}
         onChatSendRequestHandled={onChatSendRequestHandled}
         onAskFollowUp={onAskFollowUp}
+        onNavigateToSettings={onNavigateToSettings}
         selectedModelId={selectedModelId}
         onModelChange={onModelChange}
         themeMode={themeMode}
+        privateMode={privateMode}
+        featureToggles={featureToggles}
+        effectiveFeatureToggles={effectiveFeatureToggles}
         carryContext={carryContext}
         onThemeModeChange={onThemeModeChange}
-        onCarryContextChange={onCarryContextChange}
+        onPrivateModeChange={onPrivateModeChange}
+        onFeatureToggleChange={onFeatureToggleChange}
       />
-      <IconRail activePanel={activePanel} items={RAIL_ITEMS} onSelect={onSelectPanel} />
+      <IconRail activePanel={activePanel} items={visibleRailItems} onSelect={onSelectPanel} />
     </main>
   );
 }

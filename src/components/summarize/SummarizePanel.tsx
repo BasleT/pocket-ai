@@ -153,9 +153,9 @@ export function SummarizePanel({ pageContext, onAskFollowUp }: SummarizePanelPro
             <button
               type="button"
               onClick={() => onAskFollowUp(summary)}
-              className="ui-btn ui-btn-ghost"
+              className="ui-btn ui-btn-accent"
             >
-              Ask follow-up
+              Ask follow-up questions →
             </button>
           </>
         ) : null}

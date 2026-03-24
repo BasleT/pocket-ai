@@ -7,6 +7,7 @@ import { SettingsPanel } from '../Settings/SettingsPanel';
 import { SummarizePanel } from '../summarize/SummarizePanel';
 import { YouTubePanel } from '../youtube/YouTubePanel';
 import { CONTENT_TYPE_META, detectContentType } from '../../lib/ai';
+import type { FeatureToggleId, FeatureToggles } from '../../lib/featureToggles';
 import type { ActivePanel } from './types';
 import type { ChatModelId } from '../../types/chat';
 import type { PageContentResult } from '../../types/page';
@@ -53,13 +54,42 @@ type PanelProps = {
   chatSendRequest?: { id: string; text: string } | null;
   onChatSendRequestHandled?: (id: string) => void;
   onAskFollowUp: (summary: string) => void;
+  onNavigateToSettings: () => void;
   selectedModelId: ChatModelId;
   onModelChange: (modelId: ChatModelId) => void;
   themeMode: ThemeMode;
+  privateMode: boolean;
+  featureToggles: FeatureToggles;
+  effectiveFeatureToggles: FeatureToggles;
   carryContext: boolean;
   onThemeModeChange: (theme: ThemeMode) => void;
-  onCarryContextChange: (enabled: boolean) => void;
+  onPrivateModeChange: (enabled: boolean) => void;
+  onFeatureToggleChange: (toggleId: FeatureToggleId, enabled: boolean) => void;
 };
+
+function ExtractionBadge({ source }: { source?: PageContentResult['source'] }) {
+  if (!source || source === 'readability') {
+    return null;
+  }
+
+  const config = {
+    fallback: { label: 'Limited context', color: 'var(--text-muted)' },
+    body: { label: 'Body text only', color: '#f59e0b' },
+    dom: { label: 'DOM fallback', color: '#f59e0b' },
+    ocr: { label: 'OCR extracted', color: '#3b82f6' },
+    unsupported: { label: 'No page context', color: '#ef4444' },
+  }[source] ?? { label: source, color: 'var(--text-muted)' };
+
+  return (
+    <span
+      className="rounded px-1.5 py-0.5 text-[10px]"
+      style={{ color: config.color, background: 'var(--bg-overlay)' }}
+      title={config.label}
+    >
+      {config.label}
+    </span>
+  );
+}
 
 export function Panel({
   activePanel,
@@ -70,12 +100,17 @@ export function Panel({
   chatSendRequest,
   onChatSendRequestHandled,
   onAskFollowUp,
+  onNavigateToSettings,
   selectedModelId,
   onModelChange,
   themeMode,
+  privateMode,
+  featureToggles,
+  effectiveFeatureToggles,
   carryContext,
   onThemeModeChange,
-  onCarryContextChange,
+  onPrivateModeChange,
+  onFeatureToggleChange,
 }: PanelProps) {
   const content = PANEL_CONTENT[activePanel];
   const contentType = pageContext ? detectContentType(pageContext.url, pageContext.content) : 'page';
@@ -84,31 +119,36 @@ export function Panel({
   return (
     <section className="ui-panel" aria-live="polite">
       <header className="ui-panel-header">
-        <p className="ui-brand">Pocket AI</p>
-        <div className="flex items-center gap-2 min-w-0">
-          <p key={pageContext?.url ?? pageTitle} className="ui-page-title page-title-animate">{pageTitle}</p>
-          {pageContext?.content ? (
-            <span key={`${pageContext.url}-${contentType}`} className="ui-content-badge badge-animate" title={contentTypeMeta.label}>
+        <p className="ui-brand shrink-0">Pocket AI</p>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-hidden pl-3">
+          <p
+            key={pageContext?.url ?? pageTitle}
+            className="ui-page-title page-title-animate min-w-0 truncate"
+          >
+            {pageTitle}
+          </p>
+
+          {pageContext?.source && pageContext.source !== 'readability' ? (
+            <ExtractionBadge source={pageContext.source} />
+          ) : pageContext?.content ? (
+            <span
+              key={`${pageContext.url}-${contentType}`}
+              className="ui-content-badge badge-animate shrink-0"
+              title={contentTypeMeta.label}
+            >
               <span aria-hidden="true">{contentTypeMeta.emoji}</span>
-              <span>{contentTypeMeta.label}</span>
-            </span>
-          ) : null}
-          {pageContext?.source === 'ocr' ? (
-            <span className="ui-content-badge badge-animate" title="Content extracted from screenshot OCR">
-              <span aria-hidden="true">📷</span>
-              <span>OCR</span>
             </span>
           ) : null}
         </div>
       </header>
 
-      {pageWarning ? (
+      {pageWarning && pageWarning !== pageContext?.warning ? (
         <div className="px-4 py-2 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
           {pageWarning}
         </div>
       ) : null}
 
-      <div key={activePanel} className="ui-panel-body panel-animate">
+      <div key={activePanel} className="ui-panel-body panel-animate h-full">
         {activePanel === 'chat' ? (
           <ChatPanel
             pageContext={pageContext}
@@ -118,11 +158,16 @@ export function Panel({
             onSendRequestHandled={onChatSendRequestHandled}
             modelId={selectedModelId}
             onModelChange={onModelChange}
+            onNavigateToSettings={onNavigateToSettings}
           />
         ) : activePanel === 'summarize' ? (
           <SummarizePanel pageContext={pageContext} onAskFollowUp={onAskFollowUp} />
         ) : activePanel === 'youtube' ? (
-          <YouTubePanel activePageUrl={pageContext?.url ?? ''} onAskAboutVideo={onAskFollowUp} />
+          <YouTubePanel
+            activePageUrl={pageContext?.url ?? ''}
+            enabled={effectiveFeatureToggles.youtubeAutoFetch}
+            onAskAboutVideo={onAskFollowUp}
+          />
         ) : activePanel === 'pdf' ? (
           <PdfPanel onAskAboutPdf={onAskFollowUp} />
         ) : activePanel === 'ocr' ? (
@@ -132,9 +177,12 @@ export function Panel({
             selectedModelId={selectedModelId}
             onModelChange={onModelChange}
             themeMode={themeMode}
+            privateMode={privateMode}
+            featureToggles={featureToggles}
+            effectiveFeatureToggles={effectiveFeatureToggles}
             onThemeModeChange={onThemeModeChange}
-            carryContext={carryContext}
-            onCarryContextChange={onCarryContextChange}
+            onPrivateModeChange={onPrivateModeChange}
+            onFeatureToggleChange={onFeatureToggleChange}
           />
       ) : (
           <div className="ui-empty">

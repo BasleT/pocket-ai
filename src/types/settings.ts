@@ -1,4 +1,5 @@
 import type { OcrLanguage } from '../lib/extractors/ocr';
+import type { FeatureToggles } from '../lib/featureToggles';
 
 export type ProviderId = 'chatgpt' | 'claude' | 'gemini' | 'grok' | 'deepseek';
 
@@ -37,6 +38,8 @@ export type TestConnectionResponse =
 export type AppSettings = {
   embedProviders: EmbedProviderToggles;
   ocrLanguage: OcrLanguage;
+  privateMode?: boolean;
+  featureToggles?: FeatureToggles;
 };
 
 export type ThemeMode = 'system' | 'light' | 'dark';

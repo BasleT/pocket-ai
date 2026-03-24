@@ -9,6 +9,13 @@ import {
   createPreviousPageContextStorageKey,
   shouldExtractPageFromUrl,
 } from '../src/lib/pageContextStore';
+import {
+  FEATURE_TOGGLES_STORAGE_KEY,
+  PRIVATE_MODE_STORAGE_KEY,
+  getEffectiveFeatureToggles,
+  normalizeFeatureToggles,
+  type FeatureToggles,
+} from '../src/lib/featureToggles';
 import { storageGetSecret } from '../src/lib/storage';
 import type {
   ChatPortResponse,
@@ -43,8 +50,193 @@ function createPendingSelectionPromptKey(tabId: number): string {
   return `${PENDING_SELECTION_PROMPT_PREFIX}${tabId}`;
 }
 
-function extractPagePayloadInPage(selectionText: string) {
+async function getEffectiveFeatureTogglesFromStorage() {
+  const stored = await chrome.storage.local.get([
+    FEATURE_TOGGLES_STORAGE_KEY,
+    PRIVATE_MODE_STORAGE_KEY,
+  ]);
+  const normalized = normalizeFeatureToggles(
+    stored[FEATURE_TOGGLES_STORAGE_KEY] as Partial<FeatureToggles> | undefined,
+  );
+  return getEffectiveFeatureToggles(normalized, Boolean(stored[PRIVATE_MODE_STORAGE_KEY]));
+}
+
+async function extractPagePayloadInPage(selectionText: string) {
   const maxExtractChars = 20_000;
+  const minReadableChars = 400;
+
+  const boilerplatePatterns: RegExp[] = [
+    /__VIEWSTATE/i,
+    /__EVENTTARGET/i,
+    /__EVENTARGUMENT/i,
+    /__AntiXsrf/i,
+    /^function\s+__doPostBack/i,
+    /Sys\.WebForms\.PageRequestManager/i,
+    /ScriptResource\.axd/i,
+    /WebResource\.axd/i,
+    /^\s*(var|function)\s+[A-Za-z_$][\w$]*\s*\(/,
+    /^\s*\$addHandler\(/,
+    /^\s*Sys[A-Za-z]+\(/,
+  ];
+
+  const normalize = (value: string | null | undefined): string => (value ?? '').replace(/\s+/g, ' ').trim();
+
+  const stripBoilerplate = (value: string): string => {
+    const filteredLines = value
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .filter((line) => !boilerplatePatterns.some((pattern) => pattern.test(line)));
+
+    return normalize(filteredLines.join(' '));
+  };
+
+  const getVisibleText = (element: Element | null | undefined): string => {
+    if (!element) {
+      return '';
+    }
+
+    const htmlElement = element as HTMLElement;
+    const raw = htmlElement.innerText || element.textContent || '';
+    return stripBoilerplate(raw);
+  };
+
+  const isElementVisible = (element: Element | null): boolean => {
+    if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden') {
+      return false;
+    }
+
+    return element.offsetParent !== null || style.position === 'fixed';
+  };
+
+  const extractControlValue = (element: Element): string => {
+    if (element instanceof HTMLSelectElement) {
+      const selected = element.options[element.selectedIndex];
+      return normalize(selected?.textContent || element.value);
+    }
+
+    if (element instanceof HTMLTextAreaElement) {
+      return normalize(element.value);
+    }
+
+    if (element instanceof HTMLInputElement) {
+      const inputType = element.type.toLowerCase();
+      if (inputType === 'hidden' || inputType === 'password' || inputType === 'file') {
+        return '';
+      }
+
+      if ((inputType === 'checkbox' || inputType === 'radio') && !element.checked) {
+        return '';
+      }
+
+      if (inputType === 'checkbox') {
+        return normalize(element.value || 'checked');
+      }
+
+      return normalize(element.value);
+    }
+
+    return '';
+  };
+
+  const extractFormSnapshot = (): string => {
+    const pairs: string[] = [];
+    const seen = new Set<string>();
+    const rows = Array.from(document.querySelectorAll('tr')).slice(0, 500);
+
+    for (const row of rows) {
+      const labelCell = row.querySelector('td.Label, td.LabelLeft, th, td[class*="Label"]');
+      const fieldCell = row.querySelector('td.Field, td[class*="Field"], td:last-child');
+
+      if (!labelCell || !fieldCell || !isElementVisible(labelCell) || !isElementVisible(fieldCell)) {
+        continue;
+      }
+
+      const label = normalize((labelCell as HTMLElement).innerText || labelCell.textContent || '').replace(/[:\s]+$/, '');
+      if (!label || label.length < 2) {
+        continue;
+      }
+
+      const controls = Array.from(
+        fieldCell.querySelectorAll('input:not([type="hidden"]), textarea, select'),
+      ).slice(0, 4);
+
+      const values: string[] = [];
+      for (const control of controls) {
+        const controlValue = extractControlValue(control);
+        if (!controlValue || controlValue.length > 220) {
+          continue;
+        }
+        values.push(controlValue);
+      }
+
+      let value = values.join(' | ');
+      if (!value) {
+        const fieldText = getVisibleText(fieldCell)
+          .replace(/\b(Timestamp|Full screen|Search|F2 \(Search\))\b/gi, '')
+          .trim();
+        value = fieldText.startsWith(label) ? normalize(fieldText.slice(label.length)) : fieldText;
+      }
+
+      if (!value) {
+        continue;
+      }
+
+      const pair = `${label}: ${value}`.slice(0, 280);
+      if (seen.has(pair)) {
+        continue;
+      }
+
+      seen.add(pair);
+      pairs.push(pair);
+
+      if (pairs.length >= 140) {
+        break;
+      }
+    }
+
+    return pairs.join('\n');
+  };
+
+  const waitForContent = (): Promise<void> => {
+    return new Promise((resolve) => {
+      const visibleTextLength = normalize((document.body as HTMLElement | null)?.innerText || '').length;
+      if (visibleTextLength > 500 || (document.body?.textContent?.length ?? 0) > 2_000) {
+        resolve();
+        return;
+      }
+
+      let observer: MutationObserver | null = null;
+
+      const timeout = window.setTimeout(() => {
+        observer?.disconnect();
+        resolve();
+      }, 1500);
+
+      observer = new MutationObserver(() => {
+        const visibleTextLength = normalize((document.body as HTMLElement | null)?.innerText || '').length;
+        if (visibleTextLength > 500 || (document.body?.textContent?.length ?? 0) > 2_000) {
+          window.clearTimeout(timeout);
+          observer?.disconnect();
+          resolve();
+        }
+      });
+
+      if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      } else {
+        window.clearTimeout(timeout);
+        resolve();
+      }
+    });
+  };
+
+  await waitForContent();
 
   const truncate = (value: string, max = maxExtractChars): string => {
     if (value.length <= max) {
@@ -54,7 +246,6 @@ function extractPagePayloadInPage(selectionText: string) {
     return value.slice(0, max);
   };
 
-  const normalize = (value: string | null | undefined): string => (value ?? '').replace(/\s+/g, ' ').trim();
   const url = window.location.href;
   const title = normalize(document.title) || 'Untitled page';
   const selection = normalize(selectionText);
@@ -69,9 +260,9 @@ function extractPagePayloadInPage(selectionText: string) {
       const clonedDoc = document.cloneNode(true) as Document;
       const reader = new ReadabilityCtor(clonedDoc);
       const article = reader.parse();
-      const readableText = normalize(article?.textContent);
+      const readableText = stripBoilerplate(article?.textContent ?? '');
 
-      if (article && readableText.length > 200) {
+      if (article && readableText.length > minReadableChars) {
         console.log('[pocket-ai] extraction step 1 readability success', {
           url,
           length: readableText.length,
@@ -105,9 +296,9 @@ function extractPagePayloadInPage(selectionText: string) {
 
   for (const selector of selectors) {
     const element = document.querySelector(selector);
-    const text = normalize(element?.textContent);
+    const text = getVisibleText(element);
 
-    if (text.length > 200) {
+    if (text.length > minReadableChars) {
       console.log('[pocket-ai] extraction step 2 dom fallback success', {
         url,
         selector,
@@ -128,9 +319,43 @@ function extractPagePayloadInPage(selectionText: string) {
     }
   }
 
+  console.log('[pocket-ai] extraction step 2b form traversal begin', { url });
+  const formSnapshot = extractFormSnapshot();
+  if (formSnapshot.length > minReadableChars) {
+    console.log('[pocket-ai] extraction step 2b form traversal success', {
+      url,
+      length: formSnapshot.length,
+    });
+
+    const formResult = {
+      title,
+      url,
+      content: truncate(formSnapshot),
+      source: 'dom' as const,
+      selection: selection || undefined,
+      warning: 'Using form-aware extraction for script-heavy page content.',
+    };
+    console.log('[pocket-ai] result:', formResult.source, formResult.content.length);
+
+    return formResult;
+  }
+
   console.log('[pocket-ai] extraction step 3 body fallback begin', { url });
-  const bodyText = normalize(document.body?.textContent ?? '');
+  const bodyText = getVisibleText(document.body);
   const lastResortText = bodyText;
+
+  const lowSignalShellPattern = /(enable client script|javascript.+(disabled|required)|one moment please)/i;
+  if (lowSignalShellPattern.test(lastResortText) && lastResortText.length < 900) {
+    return {
+      title,
+      url,
+      content: '',
+      source: 'unsupported' as const,
+      selection: selection || undefined,
+      warning: 'This page appears to be a script shell. Open content first, then click Re-read.',
+    };
+  }
+
   if (lastResortText.length > 100) {
     console.log('[pocket-ai] extraction step 3 body fallback success', {
       url,
@@ -356,6 +581,12 @@ async function runScreenshotOcrFallback(tabId: number, tab: chrome.tabs.Tab): Pr
 }
 
 async function extractPageContentForTab(tabId: number, selectionText = '', reason = 'unknown'): Promise<void> {
+  const effectiveToggles = await getEffectiveFeatureTogglesFromStorage();
+  const isManual = reason === 'manual-request';
+  if (!effectiveToggles.pageContextAutoRead && !isManual) {
+    return;
+  }
+
   const tab = await chrome.tabs.get(tabId);
   const tabUrl = tab.url ?? '';
 
@@ -404,7 +635,7 @@ async function extractPageContentForTab(tabId: number, selectionText = '', reaso
       safePayload.warning = 'Extraction returned empty content.';
     }
 
-    if (safePayload.content.length < 100) {
+    if (safePayload.content.length < 100 && effectiveToggles.ocrScreenshotFallback) {
       const activeTabId = await getActiveTabId();
       if (activeTabId === tabId) {
         const ocrFallback = await runScreenshotOcrFallback(tabId, tab);
@@ -489,6 +720,21 @@ async function handleGetPageContentRequest(): Promise<GetPageContentResponse> {
 }
 
 async function handleGetYouTubeContextRequest(): Promise<GetYouTubeContextResponse> {
+  const effectiveToggles = await getEffectiveFeatureTogglesFromStorage();
+  if (!effectiveToggles.youtubeAutoFetch) {
+    return {
+      ok: true,
+      data: {
+        isYouTubePage: false,
+        hasTranscript: false,
+        title: '',
+        url: '',
+        videoId: null,
+        transcriptChunks: [],
+      },
+    };
+  }
+
   const tabId = await getActiveTabId();
   if (!tabId) {
     return { ok: false, message: 'No active tab found.' };
@@ -914,26 +1160,33 @@ export default defineBackground(() => {
       typeof message.action === 'string' &&
       typeof message.text === 'string'
     ) {
-      const tabId = _sender.tab?.id;
-      if (!tabId) {
-        sendResponse({ ok: false });
-        return false;
-      }
+      void getEffectiveFeatureTogglesFromStorage().then((effectiveToggles) => {
+        if (!effectiveToggles.selectionToolbar) {
+          sendResponse({ ok: false, message: 'Selection toolbar disabled by settings.' });
+          return;
+        }
 
-      void chrome.storage.session
-        .set({
-          [createPendingSelectionPromptKey(tabId)]: { action: message.action, text: message.text },
-          [GLOBAL_PENDING_SELECTION_PROMPT_KEY]: { action: message.action, text: message.text },
-        })
-        .then(() => chrome.sidePanel.open({ tabId }))
-        .then(() => {
-        openSidePanelTabs.add(tabId);
-        void chrome.runtime.sendMessage({ type: 'SELECTION_ACTION', action: message.action, text: message.text });
-        sendResponse({ ok: true });
-        })
-        .catch(() => {
+        const tabId = _sender.tab?.id;
+        if (!tabId) {
           sendResponse({ ok: false });
-        });
+          return;
+        }
+
+        void chrome.storage.session
+          .set({
+            [createPendingSelectionPromptKey(tabId)]: { action: message.action, text: message.text },
+            [GLOBAL_PENDING_SELECTION_PROMPT_KEY]: { action: message.action, text: message.text },
+          })
+          .then(() => chrome.sidePanel.open({ tabId }))
+          .then(() => {
+            openSidePanelTabs.add(tabId);
+            void chrome.runtime.sendMessage({ type: 'SELECTION_ACTION', action: message.action, text: message.text });
+            sendResponse({ ok: true });
+          })
+          .catch(() => {
+            sendResponse({ ok: false });
+          });
+      });
 
       return true;
     }

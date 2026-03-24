@@ -1,4 +1,11 @@
 import { Readability } from '@mozilla/readability';
+import {
+  FEATURE_TOGGLES_STORAGE_KEY,
+  PRIVATE_MODE_STORAGE_KEY,
+  getEffectiveFeatureToggles,
+  normalizeFeatureToggles,
+  type FeatureToggles,
+} from '../src/lib/featureToggles';
 import { recognizeImageText } from '../src/lib/extractors/ocr';
 import type {
   GetPageContentMessage,
@@ -54,6 +61,16 @@ export default defineContentScript({
     let selectionToolbar: HTMLDivElement | null = null;
     let lastObservedScrollHeight = document.documentElement.scrollHeight;
     let suppressToolbarUntil = 0;
+    let effectiveToggles = getEffectiveFeatureToggles(undefined, false);
+
+    const loadEffectiveToggles = async () => {
+      const stored = await chrome.storage.local.get([
+        FEATURE_TOGGLES_STORAGE_KEY,
+        PRIVATE_MODE_STORAGE_KEY,
+      ]);
+      const toggles = normalizeFeatureToggles(stored[FEATURE_TOGGLES_STORAGE_KEY] as Partial<FeatureToggles> | undefined);
+      effectiveToggles = getEffectiveFeatureToggles(toggles, Boolean(stored[PRIVATE_MODE_STORAGE_KEY]));
+    };
 
     const removeToolbar = () => {
       if (!selectionToolbar) {
@@ -148,11 +165,13 @@ export default defineContentScript({
         button.style.transition = 'background 100ms';
 
         button.addEventListener('mouseenter', () => {
-          button.style.background = 'rgba(255,255,255,0.1)';
+          button.style.background = 'rgba(139, 92, 246, 0.2)';
+          button.style.color = '#c4b5fd';
         });
 
         button.addEventListener('mouseleave', () => {
           button.style.background = 'transparent';
+          button.style.color = '#ffffff';
         });
 
         const triggerSelectionAction = (event: Event) => {
@@ -171,6 +190,15 @@ export default defineContentScript({
         toolbar.appendChild(button);
       }
 
+      const hint = document.createElement('span');
+      hint.textContent = 'esc';
+      hint.style.fontSize = '10px';
+      hint.style.padding = '4px 6px';
+      hint.style.color = 'rgba(255,255,255,0.65)';
+      hint.style.alignSelf = 'center';
+      hint.style.userSelect = 'none';
+      toolbar.appendChild(hint);
+
       document.documentElement.appendChild(toolbar);
       selectionToolbar = toolbar;
 
@@ -181,6 +209,11 @@ export default defineContentScript({
     };
 
     const requestBackgroundSnapshot = (reason: string) => {
+      const isManual = reason === 'manual-request';
+      if (!effectiveToggles.pageContextAutoRead && !isManual) {
+        return;
+      }
+
       console.log('[pocket-ai] extracting:', document.title);
       console.log('[pocket-ai] body length:', document.body?.textContent?.length ?? 0);
 
@@ -238,6 +271,11 @@ export default defineContentScript({
     };
 
     const updateSelection = () => {
+      if (!effectiveToggles.selectionToolbar) {
+        removeToolbar();
+        return;
+      }
+
       const selection = window.getSelection();
       const text = selection?.toString().trim() ?? '';
       latestSelection = text;
@@ -271,6 +309,11 @@ export default defineContentScript({
     window.addEventListener('keyup', updateSelection);
     window.addEventListener('scroll', removeToolbar, true);
     window.addEventListener('scroll', checkLazyLoadedGrowth, true);
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        removeToolbar();
+      }
+    });
     document.addEventListener('mousedown', (event) => {
       const target = event.target as Node | null;
       if (selectionToolbar && target && selectionToolbar.contains(target)) {
@@ -300,6 +343,23 @@ export default defineContentScript({
     window.setTimeout(() => requestBackgroundSnapshot('initial-timeout'), 0);
     scheduleAfterInitialExtraction();
     observeDynamicDomUpdates();
+    void loadEffectiveToggles();
+
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local') {
+        return;
+      }
+
+      if (!changes[FEATURE_TOGGLES_STORAGE_KEY] && !changes[PRIVATE_MODE_STORAGE_KEY]) {
+        return;
+      }
+
+      void loadEffectiveToggles().then(() => {
+        if (!effectiveToggles.selectionToolbar) {
+          removeToolbar();
+        }
+      });
+    });
 
     chrome.runtime.onMessage.addListener(
       (
@@ -317,6 +377,17 @@ export default defineContentScript({
         }
 
         if (rawMessage.type === 'GET_YOUTUBE_VIDEO_INFO') {
+          if (!effectiveToggles.youtubeAutoFetch) {
+            const response: GetYouTubeVideoInfoResponse = {
+              isYouTubePage: false,
+              videoId: null,
+              url: window.location.href,
+              title: document.title,
+            };
+            sendResponse(response);
+            return false;
+          }
+
           const response: GetYouTubeVideoInfoResponse = {
             isYouTubePage: window.location.hostname.includes('youtube.com') ||
               window.location.hostname.includes('youtu.be'),
